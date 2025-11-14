@@ -543,12 +543,6 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
           </button>
         </div>
       </form>
-      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        Varsayılan yönetici: <strong>{adminUser.name}</strong> (şifre:{" "}
-        <code>{adminPassword}</code>)<br />
-        Varsayılan öğretmenler: HAYATİ GÜLDAL, NECİP MURAT UYSAL (şifre:{" "}
-        <code>1234</code>).
-      </p>
     </div>
   );
 }
