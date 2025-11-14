@@ -3,6 +3,19 @@
 import React, { useEffect, useState } from "react";
 import { ShipWheel, AlertCircle, Unlock } from "lucide-react";
 import * as XLSX from "xlsx";
+import { createClient } from "@supabase/supabase-js";
+
+// ——— Supabase client ———
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.warn(
+    "Supabase URL veya KEY tanımlı değil. .env dosyasında VITE_SUPABASE_URL ve VITE_SUPABASE_KEY eklemeyi unutmayın."
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ——— Sabitler ve Varsayılanlar ———
 const ADMIN_USER = { name: "AYHAN KAPICI (Rehber Öğretmen)", role: "admin" };
@@ -377,7 +390,7 @@ function AdminTeacherPanel({
           <div className="flex gap-2 pt-1">
             <button
               type="submit"
-              className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+              className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 dark:bg:white dark:text-gray-900"
             >
               {editingTeacherId ? "Güncelle" : "Kaydet"}
             </button>
@@ -537,7 +550,7 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
         <div className="pt-1">
           <button
             type="submit"
-            className="w-full rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+            className="w-full rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg:white dark:text-gray-900"
           >
             Giriş
           </button>
@@ -563,6 +576,9 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
   const [conflicts, setConflicts] = useState(new Set());
   const [warnings, setWarnings] = useState([]);
   const [onlyMine, setOnlyMine] = useState(true);
+
+  const [dbError, setDbError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const norm = (s) => (s || "").trim().toLocaleUpperCase("tr-TR");
 
@@ -598,7 +614,80 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     checkConflicts(draft);
   };
 
-  const setCell = (key, value) => updateDayCells({ ...dayCells, [key]: value });
+  // Supabase senkronizasyonu: belli bir saat ve salon için kayıtları güncelle
+  const syncHourRoom = async (hour, col, draft) => {
+    const roomName = rooms[col];
+    if (!roomName || !supabase) return;
+
+    const teacher = draft[`${hour}-${col}-teacher`] || null;
+
+    const students = [1, 2]
+      .map((p) => {
+        const no = (draft[`${hour}-${col}-${p}-no`] || "").trim();
+        const name = (draft[`${hour}-${col}-${p}-name`] || "").trim();
+        const cls = (draft[`${hour}-${col}-${p}-class`] || "").trim();
+        if (!no && !name && !cls) return null;
+        return { no, name, cls };
+      })
+      .filter(Boolean);
+
+    try {
+      setDbError("");
+      // Önce bu saat + salon + tarih için tüm kayıtları sil
+      const { error: delError } = await supabase
+        .from("etut_atamalari")
+        .delete()
+        .eq("tarih", selectedDate)
+        .eq("saat", hour)
+        .eq("salon", roomName);
+
+      if (delError) {
+        console.error("Supabase delete error", delError);
+        setDbError("Sunucuya kaydederken hata oluştu (silme).");
+        return;
+      }
+
+      if (students.length === 0) {
+        // Öğrenci yoksa sadece silmek yeterli
+        return;
+      }
+
+      const payload = students.map((s) => ({
+        tarih: selectedDate,
+        saat: hour,
+        salon: roomName,
+        ogretmen: teacher,
+        ogr_no: s.no,
+        ogr_ad: s.name,
+        sinif: s.cls,
+      }));
+
+      const { error: insError } = await supabase
+        .from("etut_atamalari")
+        .insert(payload);
+
+      if (insError) {
+        console.error("Supabase insert error", insError);
+        setDbError("Sunucuya kaydederken hata oluştu (ekleme).");
+      }
+    } catch (e) {
+      console.error("Supabase sync error", e);
+      setDbError("Sunucuya kaydederken beklenmeyen bir hata oluştu.");
+    }
+  };
+
+  const setCell = (key, value) => {
+    const draft = { ...dayCells, [key]: value };
+    updateDayCells(draft);
+
+    // key -> "hour-col-..." yapısından hour ve col çıkar
+    const parts = key.split("-");
+    const hour = parseInt(parts[0], 10);
+    const col = parseInt(parts[1], 10);
+    if (!Number.isNaN(hour) && !Number.isNaN(col)) {
+      syncHourRoom(hour, col, draft);
+    }
+  };
 
   const clearPart = (hour, col, part) => {
     const draft = { ...dayCells };
@@ -607,6 +696,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     draft[`${hour}-${col}-${part}-class`] = "";
     draft[`${hour}-${col}-${part}-class-auto`] = false;
     updateDayCells(draft);
+    syncHourRoom(hour, col, draft);
   };
 
   const isCellAssignedToMe = (hour, col) =>
@@ -614,15 +704,6 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
 
   const cellVisible = (hour, col) =>
     currentRole === "admin" || !onlyMine ? true : isCellAssignedToMe(hour, col);
-
-  // Admin: her yeri düzenler, öğretmen: sadece kendi adına atanmış sütun/saat
-  const canEditThisCell = (hour, col) => {
-    if (currentRole === "admin") return true;
-    if (currentRole === "teacher") {
-      return (dayCells[`${hour}-${col}-teacher`] || "") === currentTeacher;
-    }
-    return false;
-  };
 
   if (typeof window !== "undefined") {
     window.__etutState__ = { rooms, hours, cells: dayCells, date: selectedDate };
@@ -648,6 +729,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
         draft[`${hour}-${col}-${part}-class`] || "";
     }
     updateDayCells(draft);
+    syncHourRoom(hour, col, draft);
   };
 
   const onStudentNameChange = (hour, col, part, name) => {
@@ -675,12 +757,14 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
       }
     }
     updateDayCells(draft);
+    syncHourRoom(hour, col, draft);
   };
 
   const unlockClass = (hour, col, part) => {
     const draft = { ...dayCells };
     draft[`${hour}-${col}-${part}-class-auto`] = false;
     updateDayCells(draft);
+    syncHourRoom(hour, col, draft);
   };
 
   // Öğrenci arama modalı
@@ -718,6 +802,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     draft[`${hour}-${col}-${part}-class`] = stu.class;
     draft[`${hour}-${col}-${part}-class-auto`] = true;
     updateDayCells(draft);
+    syncHourRoom(hour, col, draft);
     closeStudentSearch();
   };
 
@@ -960,6 +1045,86 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     win.document.close();
   };
 
+  const canEditThisCell = (hour, col) => {
+    if (currentRole === "admin") return true;
+    if (currentRole === "teacher") {
+      return (dayCells[`${hour}-${col}-teacher`] || "") === currentTeacher;
+    }
+    return false;
+  };
+
+  // Seçili tarihteki kayıtları Supabase'ten yükle
+  useEffect(() => {
+    if (!supabase) return;
+    let isMounted = true;
+
+    async function fetchData() {
+      try {
+        setLoading(true);
+        setDbError("");
+        const { data, error } = await supabase
+          .from("etut_atamalari")
+          .select("*")
+          .eq("tarih", selectedDate);
+
+        if (error) {
+          console.error("Supabase select error", error);
+          if (isMounted) {
+            setDbError("Sunucudan veriler alınırken hata oluştu.");
+          }
+          return;
+        }
+
+        if (!isMounted) return;
+
+        const grouped = {};
+        (data || []).forEach((row) => {
+          const key = `${row.saat}||${row.salon}`;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(row);
+        });
+
+        const draft = {};
+        hours.forEach((h) => {
+          rooms.forEach((roomName, col) => {
+            const key = `${h}||${roomName}`;
+            const list = grouped[key] || [];
+            if (list.length > 0) {
+              const first = list[0];
+              if (first.ogretmen) {
+                draft[`${h}-${col}-teacher`] = first.ogretmen;
+              }
+              list.slice(0, 2).forEach((row, idx) => {
+                const part = idx + 1;
+                draft[`${h}-${col}-${part}-no`] = row.ogr_no || "";
+                draft[`${h}-${col}-${part}-name`] = row.ogr_ad || "";
+                draft[`${h}-${col}-${part}-class`] = row.sinif || "";
+                draft[`${h}-${col}-${part}-class-auto`] = !!row.sinif;
+              });
+            }
+          });
+        });
+
+        setCellsByDate((prev) => ({ ...prev, [selectedDate]: draft }));
+        checkConflicts(draft);
+      } catch (e) {
+        console.error("Supabase fetch error", e);
+        if (isMounted) {
+          setDbError("Veriler yüklenirken beklenmeyen bir hata oluştu.");
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, rooms.length]);
+
   return (
     <div className="overflow-auto rounded-2xl border border-gray-200 dark:border-gray-800">
       {/* Üst araç çubuğu */}
@@ -993,6 +1158,11 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
             >
               Yarın
             </button>
+            {loading && (
+              <span className="ml-2 text-[11px] text-gray-500">
+                Yükleniyor…
+              </span>
+            )}
           </div>
 
           {/* Excel yükleme yalnız yönetici */}
@@ -1065,6 +1235,12 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
           {warnings.length > 3 && (
             <div>… {warnings.length - 3} benzer uyarı daha.</div>
           )}
+        </div>
+      )}
+
+      {dbError && (
+        <div className="mx-3 my-2 rounded-lg border border-rose-300 bg-rose-50 p-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+          {dbError}
         </div>
       )}
 
@@ -1387,9 +1563,9 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
       )}
 
       <div className="border-t border-gray-100 p-3 text-xs text-gray-500 dark:border-gray-800">
-        Not: Atamalar <strong>tarih bazlı</strong> tutulur. Excel (.xlsx)
-        yüklediğinizde öğrencinin <strong>numarasını</strong> yazınca adı ve
-        sınıfı otomatik dolar.
+        Not: Atamalar <strong>tarih bazlı</strong> Supabase üzerinde
+        saklanmaktadır. Öğretmen farklı bir bilgisayardan giriş yapsa bile
+        aynı tarihteki atamaları görebilir.
       </div>
     </div>
   );
