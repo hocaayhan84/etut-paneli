@@ -1,13 +1,4 @@
-/*
-ÖN İZLEME NOTU
-Bu kodun ön izlemesi, giriş ekranı ve tarih bazlı etüt planlama arayüzünü birlikte gösterir. 
-Uygulama çalıştırıldığında kullanıcı önce giriş yapacak, ardından sol tarafta öğretmen listesi ve 
-sağda etüt salonu planı görünecektir.
-
-Bu sürümde ek olarak:
-- Yönetici, öğretmen ekleme/silme ve şifre belirleme işlemlerini yapabilir.
-- Öğretmen listesi localStorage'da saklanır (etut_teachers).
-*/
+// src/App.jsx
 
 import React, { useEffect, useState } from "react";
 import { ShipWheel, AlertCircle, Unlock } from "lucide-react";
@@ -15,7 +6,7 @@ import * as XLSX from "xlsx";
 
 // ——— Sabitler ve Varsayılanlar ———
 const ADMIN_USER = { name: "AYHAN KAPICI (Rehber Öğretmen)", role: "admin" };
-const ADMIN_PASSWORD = "4321"; // Yönetici şifresi (isteğe göre değiştirilebilir)
+const ADMIN_PASSWORD = "4321"; // Yönetici şifresi
 const LS_KEY_TEACHERS = "etut_teachers";
 
 const DEFAULT_TEACHERS = [
@@ -23,7 +14,7 @@ const DEFAULT_TEACHERS = [
   { id: 2, name: "NECİP MURAT UYSAL", branch: "", password: "1234" },
 ];
 
-// ——— Yardımcı Fonksiyonlar (test edilebilir) ———
+// ——— Yardımcı Fonksiyonlar ———
 export function localYMDUtil(d) {
   const dt = d instanceof Date ? d : new Date(d);
   const y = dt.getFullYear();
@@ -76,7 +67,7 @@ export default function App() {
   const [currentTeacher, setCurrentTeacher] = useState("");
   const [currentRole, setCurrentRole] = useState("");
 
-  // Yalnızca yönetici girişinde kısa süreli parlama
+  // Admin glow
   const [adminGlow, setAdminGlow] = useState(false);
   useEffect(() => {
     if (currentRole === "admin" && currentTeacher) {
@@ -113,7 +104,6 @@ export default function App() {
       return;
     }
 
-    // Aynı isimle ikinci bir öğretmen eklenmesini engelleyelim (uyarı vererek)
     const exists = teachers.find(
       (t) =>
         t.name.toLocaleUpperCase("tr-TR") ===
@@ -127,16 +117,12 @@ export default function App() {
     }
 
     if (editingTeacherId) {
-      // Güncelle
       setTeachers((prev) =>
         prev.map((t) =>
-          t.id === editingTeacherId
-            ? { ...t, name, branch, password }
-            : t
+          t.id === editingTeacherId ? { ...t, name, branch, password } : t
         )
       );
     } else {
-      // Yeni ekle
       const newTeacher = {
         id: Date.now(),
         name,
@@ -436,9 +422,7 @@ function AdminTeacherPanel({
                   <td className="px-2 py-2">{idx + 1}</td>
                   <td className="px-2 py-2">{t.name}</td>
                   <td className="px-2 py-2">
-                    {t.branch || (
-                      <span className="text-gray-400">–</span>
-                    )}
+                    {t.branch || <span className="text-gray-400">–</span>}
                   </td>
                   <td className="px-2 py-2">{t.password}</td>
                   <td className="px-2 py-2 text-right">
@@ -467,8 +451,8 @@ function AdminTeacherPanel({
       </div>
 
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        Not: Gerçek sistemlerde şifreler bu şekilde açık gösterilmez; okul
-        içi kullanım ve pratiklik amacıyla burada görünür tutulmuştur.
+        Not: Gerçek sistemlerde şifreler bu şekilde açık gösterilmez; okul içi
+        kullanım ve pratiklik amacıyla burada görünür tutulmuştur.
       </p>
     </div>
   );
@@ -522,9 +506,7 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
       <h3 className="mb-2 text-sm font-semibold">Giriş Yap</h3>
       <form onSubmit={submit} className="space-y-2 text-sm">
         <div>
-          <label className="mb-1 block text-xs text-gray-500">
-            Kullanıcı
-          </label>
+          <label className="mb-1 block text-xs text-gray-500">Kullanıcı</label>
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
@@ -564,8 +546,8 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
         Varsayılan yönetici: <strong>{adminUser.name}</strong> (şifre:{" "}
         <code>{adminPassword}</code>)<br />
-        Varsayılan öğretmenler: HAYATİ GÜLDAL, NECİP MURAT UYSAL
-        (şifre: <code>1234</code>).
+        Varsayılan öğretmenler: HAYATİ GÜLDAL, NECİP MURAT UYSAL (şifre:{" "}
+        <code>1234</code>).
       </p>
     </div>
   );
@@ -576,11 +558,10 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
   const [rooms, setRooms] = useState(["ETÜT 1", "ETÜT 2", "ETÜT 3"]);
   const hours = Array.from({ length: 8 }, (_, i) => i + 1);
 
-  const localYMD = localYMDUtil; // tek kaynaktan kullan
+  const localYMD = localYMDUtil;
   const [selectedDate, setSelectedDate] = useState(localYMD(new Date()));
 
-  // Tarih bazlı hücreler
-  const [cellsByDate, setCellsByDate] = useState({}); // { date: { key: value } }
+  const [cellsByDate, setCellsByDate] = useState({});
   const dayCells = cellsByDate[selectedDate] || {};
 
   const classOptions = ["9/A", "9/B", "9/C", "10/A", "10/B", "11/A", "12/A"];
@@ -636,29 +617,35 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
 
   const isCellAssignedToMe = (hour, col) =>
     (dayCells[`${hour}-${col}-teacher`] || "") === currentTeacher;
+
   const cellVisible = (hour, col) =>
     currentRole === "admin" || !onlyMine ? true : isCellAssignedToMe(hour, col);
-  const canEditThisCell = () => currentRole === "admin"; // sadece admin düzenler
 
-  // Admin raporu için state yansıt
+  // Admin: her yeri düzenler, öğretmen: sadece kendi adına atanmış sütun/saat
+  const canEditThisCell = (hour, col) => {
+    if (currentRole === "admin") return true;
+    if (currentRole === "teacher") {
+      return (dayCells[`${hour}-${col}-teacher`] || "") === currentTeacher;
+    }
+    return false;
+  };
+
   if (typeof window !== "undefined") {
     window.__etutState__ = { rooms, hours, cells: dayCells, date: selectedDate };
   }
 
-  // Tarih değişiminde çakışmaları güncelle
   useEffect(() => {
     checkConflicts(dayCells);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, rooms.length]);
 
-  // Öğrenci NO girildiğinde adı/sınıfı doldur
   const onStudentNoChange = (hour, col, part, no) => {
     const draft = { ...dayCells, [`${hour}-${col}-${part}-no`]: no };
     const key = no?.toString()?.trim?.();
     const rec = key ? studentDb[key] : null;
     if (rec) {
       draft[`${hour}-${col}-${part}-name`] = rec.name || "";
-      draft[`${hour}-${col}-${part}-class`] = rec.class || ""; // sınıf otomatik
+      draft[`${hour}-${col}-${part}-class`] = rec.class || "";
       draft[`${hour}-${col}-${part}-class-auto`] = true;
     } else {
       draft[`${hour}-${col}-${part}-name`] =
@@ -669,7 +656,6 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     updateDayCells(draft);
   };
 
-  // Öğrenci ADI girildiğinde NO/SINIF otomatik bulunmaya çalışılsın (tekil eşleşmede)
   const onStudentNameChange = (hour, col, part, name) => {
     const draft = { ...dayCells, [`${hour}-${col}-${part}-name`]: name };
     const q = (name || "").trim().toLocaleUpperCase("tr-TR");
@@ -697,24 +683,26 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     updateDayCells(draft);
   };
 
-  // Yönetici için sınıf kilidini açma
   const unlockClass = (hour, col, part) => {
     const draft = { ...dayCells };
     draft[`${hour}-${col}-${part}-class-auto`] = false;
     updateDayCells(draft);
   };
 
-  // === ÖĞRENCİ ARAMA MODALI ===
+  // Öğrenci arama modalı
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchSlot, setSearchSlot] = useState(null); // {hour, col, part}
+  const [searchSlot, setSearchSlot] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+
   const openStudentSearch = (hour, col, part) => {
-    if (!canEditThisCell()) return;
+    if (!canEditThisCell(hour, col)) return;
     setSearchSlot({ hour, col, part });
     setSearchQuery("");
     setSearchOpen(true);
   };
+
   const closeStudentSearch = () => setSearchOpen(false);
+
   const filteredStudents = Object.entries(studentDb)
     .map(([no, v]) => ({ no, name: v.name || "", class: v.class || "" }))
     .filter((s) => {
@@ -726,6 +714,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
       );
     })
     .sort((a, b) => a.name.localeCompare(b.name, "tr"));
+
   const pickStudent = (stu) => {
     if (!searchSlot) return;
     const { hour, col, part } = searchSlot;
@@ -738,15 +727,13 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     closeStudentSearch();
   };
 
-  // Excel yükleme handler
   const handleExcelUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     onUploadExcel?.(file);
-    e.target.value = ""; // aynı dosyayı tekrar seçebilmek için temizle
+    e.target.value = "";
   };
 
-  // Yardımcı: satırları üret (rapor/dışa aktarım için)
   const buildRows = () => {
     const rows = [];
     hours.forEach((h) => {
@@ -773,7 +760,6 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     return rows;
   };
 
-  // CSV dışa aktar
   const exportCSV = () => {
     const rows = buildRows();
     const header = [
@@ -813,11 +799,9 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     URL.revokeObjectURL(url);
   };
 
-  // XLSX dışa aktar
   const exportXLSX = () => {
     const rows = buildRows();
     const wb = XLSX.utils.book_new();
-    // Tümü sayfası
     const wsAll = XLSX.utils.json_to_sheet(rows, {
       header: [
         "date",
@@ -839,7 +823,6 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
       skipHeader: true,
     });
     XLSX.utils.book_append_sheet(wb, wsAll, "Tümü");
-    // Öğretmene göre ayrı sayfalar
     const byTeacher = rows.reduce((acc, r) => {
       const k = r.teacher || "(Öğretmensiz)";
       (acc[k] ||= []).push(r);
@@ -882,7 +865,6 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     URL.revokeObjectURL(url);
   };
 
-  // PDF çıktısı (seçili tarihe göre)
   const exportPdf = () => {
     const entries = [];
     hours.forEach((h) => {
@@ -1142,6 +1124,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                     dayCells[`${h}-${c}-teacher`] ||
                     dayCells[`${h}-${c}-1-name`] ||
                     dayCells[`${h}-${c}-2-name`];
+                  const editable = canEditThisCell(h, c);
                   return (
                     <td
                       key={`${h}-${c}`}
@@ -1203,7 +1186,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                                   dayCells[`${h}-${c}-${p}-no`] || ""
                                 }
                                 onChange={(e) =>
-                                  canEditThisCell() &&
+                                  editable &&
                                   onStudentNoChange(
                                     h,
                                     c,
@@ -1211,9 +1194,9 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                                     e.target.value
                                   )
                                 }
-                                disabled={!canEditThisCell()}
+                                disabled={!editable}
                                 className={`h-8 w-16 rounded-lg border px-2 text-xs outline-none transition focus:ring-2 dark:border-gray-700 dark:bg-gray-900 ${
-                                  !canEditThisCell()
+                                  !editable
                                     ? "cursor-not-allowed bg-gray-50 text-gray-400"
                                     : "border-gray-300 focus:ring-gray-900/20"
                                 }`}
@@ -1247,7 +1230,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                                   ] || ""
                                 }
                                 onChange={(e) =>
-                                  canEditThisCell() &&
+                                  editable &&
                                   onStudentNameChange(
                                     h,
                                     c,
@@ -1255,9 +1238,9 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                                     e.target.value
                                   )
                                 }
-                                disabled={!canEditThisCell()}
+                                disabled={!editable}
                                 className={`h-8 w-full rounded-lg border px-2 text-xs outline-none transition focus:ring-2 dark:border-gray-700 dark:bg-gray-900 ${
-                                  !canEditThisCell()
+                                  !editable
                                     ? "cursor-not-allowed bg-gray-50 text-gray-400"
                                     : "border-gray-300 focus:ring-gray-900/20"
                                 }`}
@@ -1269,14 +1252,14 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                                   ] || ""
                                 }
                                 onChange={(e) =>
-                                  canEditThisCell() &&
+                                  editable &&
                                   setCell(
                                     `${h}-${c}-${p}-class`,
                                     e.target.value
                                   )
                                 }
                                 disabled={
-                                  !canEditThisCell() ||
+                                  !editable ||
                                   !!dayCells[
                                     `${h}-${c}-${p}-class-auto`
                                   ]
@@ -1289,7 +1272,7 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
                                     : ""
                                 }
                                 className={`h-8 min-w-[76px] rounded-lg border px-2 text-xs outline-none transition focus:ring-2 dark:border-gray-700 dark:bg-gray-900 ${
-                                  !canEditThisCell() ||
+                                  !editable ||
                                   dayCells[
                                     `${h}-${c}-${p}-class-auto`
                                   ]
@@ -1426,8 +1409,6 @@ function parseStudentExcel(file, setStudentDb) {
     const wb = XLSX.read(data, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
 
-    // A sütunu: Numara, B: Ad Soyad, C: Sınıf
-    // Başlık satırı olsa da olmasa da toleranslı okuyalım
     const rows = XLSX.utils.sheet_to_json(ws, {
       header: ["A", "B", "C"],
       defval: "",
@@ -1437,7 +1418,6 @@ function parseStudentExcel(file, setStudentDb) {
       const A = String(rows[i]["A"]).trim();
       const B = String(rows[i]["B"]).trim();
       const C = String(rows[i]["C"]).trim();
-      // Başlık olabileceğini düşünerek filtreleyelim
       if (
         !A ||
         A.toLowerCase() === "öğrenci no" ||
@@ -1445,7 +1425,7 @@ function parseStudentExcel(file, setStudentDb) {
         A.toLowerCase() === "no"
       )
         continue;
-      if (!/\d/.test(A)) continue; // numara içermiyorsa atla
+      if (!/\d/.test(A)) continue;
       db[A] = { name: B, class: C };
     }
     setStudentDb(db);
@@ -1454,45 +1434,4 @@ function parseStudentExcel(file, setStudentDb) {
     );
   };
   reader.readAsArrayBuffer(file);
-}
-
-// ——— Basit Tarayıcı Testleri (UI'ı etkilemez) ———
-function expectTest(name, condition) {
-  const ok = !!condition;
-  // eslint-disable-next-line no-console
-  console[ok ? "log" : "error"](`TEST ${ok ? "✓" : "✗"} ${name}`);
-  return ok;
-}
-
-function runSmokeTests() {
-  try {
-    const d = new Date(2024, 0, 5);
-    expectTest("localYMDUtil 2024-01-05", localYMDUtil(d) === "2024-01-05");
-    const bad = "Ali/Veli:Test*Sayfa?";
-    const safe = safeSheetNameForXLSX(bad);
-    expectTest(
-      "safeSheetName cleans illegal chars",
-      !/[\\\/?*\[\]:]/.test(safe)
-    );
-    expectTest(
-      "safeSheetName length <= 31",
-      safe.length <= 31
-    );
-    expectTest(
-      "safeSheetName fallback when empty",
-      safeSheetNameForXLSX("") === "Sayfa"
-    );
-    expectTest(
-      "safeSheetName truncates long names",
-      safeSheetNameForXLSX("X".repeat(60)).length === 31
-    );
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("TEST RUNTIME ERROR", e);
-  }
-}
-
-if (typeof window !== "undefined" && !window.__ETUT_TESTED__) {
-  window.__ETUT_TESTED__ = true;
-  runSmokeTests();
 }
