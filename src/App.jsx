@@ -11,7 +11,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.warn(
-    "Supabase URL veya KEY tanımlı değil. .env dosyasında VITE_SUPABASE_URL ve VITE_SUPABASE_KEY eklemeyi unutmayın."
+    "Supabase URL veya KEY tanımlı değil. .env / Netlify Environment Variables içinde VITE_SUPABASE_URL ve VITE_SUPABASE_KEY eklemeyi unutmayın."
   );
 }
 
@@ -20,12 +20,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // ——— Sabitler ve Varsayılanlar ———
 const ADMIN_USER = { name: "AYHAN KAPICI (Rehber Öğretmen)", role: "admin" };
 const ADMIN_PASSWORD = "4321"; // Yönetici şifresi
-const LS_KEY_TEACHERS = "etut_teachers";
-
-const DEFAULT_TEACHERS = [
-  { id: 1, name: "HAYATİ GÜLDAL", branch: "", password: "1234" },
-  { id: 2, name: "NECİP MURAT UYSAL", branch: "", password: "1234" },
-];
+const TEACHERS_TABLE = "etut_ogretmenler";
 
 // ——— Yardımcı Fonksiyonlar ———
 export function localYMDUtil(d) {
@@ -46,49 +41,47 @@ export default function App() {
   const [theme, setTheme] = useState("light");
   const isDark = theme === "dark";
 
-  // ——— Öğretmenler (localStorage ile kalıcı) ———
+  // ——— Öğretmenler (Supabase’ten ortak) ———
   const [teachers, setTeachers] = useState([]);
+  const [teachersLoading, setTeachersLoading] = useState(false);
+  const [teachersError, setTeachersError] = useState("");
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY_TEACHERS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTeachers(parsed);
-        } else {
-          setTeachers(DEFAULT_TEACHERS);
+    if (!supabase) return;
+    let mounted = true;
+
+    async function fetchTeachers() {
+      try {
+        setTeachersLoading(true);
+        setTeachersError("");
+        const { data, error } = await supabase
+          .from(TEACHERS_TABLE)
+          .select("*")
+          .order("name", { ascending: true });
+
+        if (error) {
+          console.error("Öğretmenler yüklenirken hata:", error);
+          if (mounted) setTeachersError("Öğretmen listesi yüklenemedi.");
+          return;
         }
-      } else {
-        setTeachers(DEFAULT_TEACHERS);
+        if (mounted) setTeachers(data || []);
+      } catch (e) {
+        console.error("Öğretmenler yüklenirken beklenmeyen hata:", e);
+        if (mounted) setTeachersError("Öğretmen listesi yüklenemedi.");
+      } finally {
+        if (mounted) setTeachersLoading(false);
       }
-    } catch (e) {
-      console.error("Öğretmen listesi okunamadı, varsayılanlar yükleniyor:", e);
-      setTeachers(DEFAULT_TEACHERS);
     }
-  }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(LS_KEY_TEACHERS, JSON.stringify(teachers));
-    } catch (e) {
-      console.error("Öğretmen listesi kaydedilemedi:", e);
-    }
-  }, [teachers]);
+    fetchTeachers();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // ——— Kullanıcılar ve giriş ———
   const [currentTeacher, setCurrentTeacher] = useState("");
   const [currentRole, setCurrentRole] = useState("");
-
-  // Admin glow
-  const [adminGlow, setAdminGlow] = useState(false);
-  useEffect(() => {
-    if (currentRole === "admin" && currentTeacher) {
-      setAdminGlow(true);
-      const t = setTimeout(() => setAdminGlow(false), 1800);
-      return () => clearTimeout(t);
-    }
-  }, [currentRole, currentTeacher]);
 
   // Öğrenci veritabanı (No -> {name, class})
   const [studentDb, setStudentDb] = useState({});
@@ -106,7 +99,7 @@ export default function App() {
     setTPassword("");
   };
 
-  const handleSaveTeacher = (e) => {
+  const handleSaveTeacher = async (e) => {
     e.preventDefault();
     const name = tName.trim();
     const branch = tBranch.trim();
@@ -129,23 +122,34 @@ export default function App() {
       if (!proceed) return;
     }
 
-    if (editingTeacherId) {
-      setTeachers((prev) =>
-        prev.map((t) =>
-          t.id === editingTeacherId ? { ...t, name, branch, password } : t
-        )
-      );
-    } else {
-      const newTeacher = {
-        id: Date.now(),
-        name,
-        branch,
-        password,
-      };
-      setTeachers((prev) => [...prev, newTeacher]);
-    }
+    try {
+      if (editingTeacherId) {
+        const { error } = await supabase
+          .from(TEACHERS_TABLE)
+          .update({ name, branch, password })
+          .eq("id", editingTeacherId);
 
-    resetTeacherForm();
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from(TEACHERS_TABLE)
+          .insert({ name, branch, password });
+
+        if (error) throw error;
+      }
+
+      const { data, error: refreshError } = await supabase
+        .from(TEACHERS_TABLE)
+        .select("*")
+        .order("name", { ascending: true });
+
+      if (refreshError) throw refreshError;
+      setTeachers(data || []);
+      resetTeacherForm();
+    } catch (err) {
+      console.error("Öğretmen kaydedilirken hata:", err);
+      alert("Öğretmen kaydedilirken hata oluştu. Lütfen tekrar deneyin.");
+    }
   };
 
   const handleEditTeacher = (id) => {
@@ -157,7 +161,7 @@ export default function App() {
     setTPassword(t.password || "");
   };
 
-  const handleDeleteTeacher = (id) => {
+  const handleDeleteTeacher = async (id) => {
     const t = teachers.find((x) => x.id === id);
     const name = t?.name || "";
     if (
@@ -166,9 +170,22 @@ export default function App() {
       )
     )
       return;
-    setTeachers((prev) => prev.filter((x) => x.id !== id));
-    if (editingTeacherId === id) {
-      resetTeacherForm();
+
+    try {
+      const { error } = await supabase
+        .from(TEACHERS_TABLE)
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setTeachers((prev) => prev.filter((x) => x.id !== id));
+      if (editingTeacherId === id) {
+        resetTeacherForm();
+      }
+    } catch (err) {
+      console.error("Öğretmen silinirken hata:", err);
+      alert("Öğretmen silinirken hata oluştu. Lütfen tekrar deneyin.");
     }
   };
 
@@ -176,6 +193,16 @@ export default function App() {
     setCurrentTeacher("");
     setCurrentRole("");
   };
+
+  // Admin glow
+  const [adminGlow, setAdminGlow] = useState(false);
+  useEffect(() => {
+    if (currentRole === "admin" && currentTeacher) {
+      setAdminGlow(true);
+      const t = setTimeout(() => setAdminGlow(false), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [currentRole, currentTeacher]);
 
   return (
     <div className={isDark ? "dark" : ""}>
@@ -243,7 +270,13 @@ export default function App() {
           {/* Sol: Öğretmen listesi */}
           <aside className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
             <h2 className="mb-2 text-sm font-semibold">Öğretmenler</h2>
-            <ul className="space-y-1 text-sm">
+            {teachersLoading && (
+              <p className="text-xs text-gray-500">Yükleniyor…</p>
+            )}
+            {teachersError && (
+              <p className="text-xs text-rose-500">{teachersError}</p>
+            )}
+            <ul className="mt-1 space-y-1 text-sm">
               {teachers.map((t) => (
                 <li key={t.id}>{t.name}</li>
               ))}
@@ -486,7 +519,6 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
       return;
     }
 
-    // Yönetici mi?
     if (selected === adminUser.name) {
       if (pwd === adminPassword) {
         onSuccess(adminUser.name, "admin");
@@ -496,7 +528,6 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
       return;
     }
 
-    // Öğretmen girişi
     const teacher = teachers.find((t) => t.name === selected);
     if (!teacher) {
       setErr("Bu isimde bir öğretmen bulunamadı.");
@@ -561,6 +592,8 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
 }
 
 // ——— Etüt Tablosu ———
+// (Aşağıdaki EtutTable ve parseStudentExcel fonksiyonları,
+// önceki Supabase’li sürümünüzle aynı; burada tekrar gönderiyorum.)
 function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadExcel }) {
   const [rooms, setRooms] = useState(["ETÜT 1", "ETÜT 2", "ETÜT 3"]);
   const hours = Array.from({ length: 8 }, (_, i) => i + 1);
