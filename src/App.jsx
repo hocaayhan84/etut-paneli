@@ -2396,68 +2396,72 @@ ${innerHtml}
           </div>
 
           {/* 2. Tüm öğrenciler – çoktan aza sıralı */}
-          <div className="rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] font-semibold">
-                2) {selectedDate} tarihine kadar en çok etüt alan öğrenciler
-              </span>
-              {topStudents.length > 0 && (
-                <button
-                  type="button"
-                  onClick={exportTopStudentsPdf}
-                  className="rounded-lg border border-gray-300 px-2 py-1 text-[10px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-                >
-                  PDF’e Aktar
-                </button>
-              )}
-            </div>
-            {topStudentsLoading && (
-              <div className="text-[11px] text-gray-500">Yükleniyor…</div>
-            )}
-            {topStudentsError && (
-              <div className="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
-                {topStudentsError}
-              </div>
-            )}
-            {!topStudentsLoading && topStudents.length > 0 && (
-              <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
-                <table className="w-full text-[11px]">
-                  <thead className="bg-white/70 backdrop-blur-sm text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-800/30">
-                      <th className="px-2 py-1 text-left">#</th>
-                      <th className="px-2 py-1 text-left">No</th>
-                      <th className="px-2 py-1 text-left">Ad Soyad</th>
-                      <th className="px-2 py-1 text-left">Sınıf</th>
-                      <th className="px-2 py-1 text-right">Etüt</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topStudents.slice(0, 100).map((s, idx) => (
-                      <tr
-                        key={`${s.ogr_no}-${idx}`}
-                        className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
-                      >
-                        <td className="px-2 py-1">{idx + 1}</td>
-                        <td className="px-2 py-1">{s.ogr_no}</td>
-                        <td className="px-2 py-1">{s.ogr_ad}</td>
-                        <td className="px-2 py-1">{s.sinif}</td>
-                        <td className="px-2 py-1 text-right font-semibold">
-                          {s.count}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {!topStudentsLoading &&
-              !topStudentsError &&
-              topStudents.length === 0 && (
-                <div className="text-[11px] text-gray-500">
-                  {selectedDate} tarihine kadar etüt kaydı bulunamadı.
-                </div>
-              )}
-          </div>
-        </div>
+<div className="rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900">
+  <div className="mb-1 flex items-center justify-between">
+    <span className="text-[11px] font-semibold">
+      2) {selectedDate} tarihine kadar en çok etüt alan öğrenciler
+    </span>
+    {topStudents.length > 0 && (
+      <button
+        type="button"
+        onClick={exportTopStudentsPdf}
+        className="rounded-lg border border-gray-300 px-2 py-1 text-[10px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+      >
+        PDF’e Aktar
+      </button>
+    )}
+  </div>
+
+  {topStudentsLoading && (
+    <div className="text-[11px] text-gray-500">Yükleniyor…</div>
+  )}
+
+  {topStudentsError && (
+    <div className="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+      {topStudentsError}
+    </div>
+  )}
+
+  {!topStudentsLoading && topStudents.length > 0 && (
+    <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+      <table className="w-full text-[11px]">
+        <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+          <tr>
+            <th className="px-2 py-1 text-left">#</th>
+            <th className="px-2 py-1 text-left">No</th>
+            <th className="px-2 py-1 text-left">Ad Soyad</th>
+            <th className="px-2 py-1 text-left">Sınıf</th>
+            <th className="px-2 py-1 text-right">Etüt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {topStudents.slice(0, 100).map((s, idx) => (
+            <tr
+              key={`${s.ogr_no}-${idx}`}
+              className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+            >
+              <td className="px-2 py-1">{idx + 1}</td>
+              <td className="px-2 py-1">{s.ogr_no}</td>
+              <td className="px-2 py-1">{s.ogr_ad}</td>
+              <td className="px-2 py-1">{s.sinif}</td>
+              <td className="px-2 py-1 text-right font-semibold">
+                {s.count}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  {!topStudentsLoading &&
+    !topStudentsError &&
+    topStudents.length === 0 && (
+      <div className="text-[11px] text-gray-500">
+        {selectedDate} tarihine kadar etüt kaydı bulunamadı.
+      </div>
+    )}
+</div>
 
         {/* ÖĞRETMEN RAPORLARI */}
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-sm backdrop-blur-sm dark:border-emerald-900/40 dark:bg-emerald-900/20">
