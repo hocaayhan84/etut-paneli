@@ -1757,6 +1757,526 @@ function EtutTable({
         saklanmaktadır. Öğretmen farklı bir bilgisayardan giriş yapsa bile
         aynı tarihteki atamaları görebilir.
       </div>
+      {/* SADECE REHBER ÖĞRETMEN İÇİN RAPORLAR BÖLÜMÜ */}
+      {currentRole === "admin" && (
+        <AdminReportsSection
+          selectedDate={selectedDate}
+          teachers={teachers}
+        />
+      )}
+    </div>
+  );
+}
+// ——— Rehber Öğretmen RAPORLAR BÖLÜMÜ ———
+function AdminReportsSection({ selectedDate, teachers }) {
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentLoading, setStudentLoading] = useState(false);
+  const [studentError, setStudentError] = useState("");
+  const [studentRecords, setStudentRecords] = useState([]);
+  const [studentSummary, setStudentSummary] = useState({});
+
+  const [topStudents, setTopStudents] = useState([]);
+  const [topStudentsLoading, setTopStudentsLoading] = useState(false);
+  const [topStudentsError, setTopStudentsError] = useState("");
+
+  const [teacherForList, setTeacherForList] = useState("");
+  const [teacherRecords, setTeacherRecords] = useState([]);
+  const [teacherSearchLoading, setTeacherSearchLoading] = useState(false);
+  const [teacherSearchError, setTeacherSearchError] = useState("");
+
+  const [teacherTotals, setTeacherTotals] = useState([]);
+  const [teacherTotalsLoading, setTeacherTotalsLoading] = useState(false);
+  const [teacherTotalsError, setTeacherTotalsError] = useState("");
+
+  // Branşa göre ders kategorisi
+  const categoryFromBranch = (branchRaw) => {
+    const b = (branchRaw || "").toLocaleUpperCase("tr-TR");
+    if (b.includes("MATEM")) return "Matematik";
+    if (b.includes("FİZ") || b.includes("FIZ")) return "Fizik";
+    if (b.includes("KİMYA") || b.includes("KIMYA")) return "Kimya";
+    if (b.includes("BİYO") || b.includes("BIYO")) return "Biyoloji";
+    if (b.includes("EDEB") || b.includes("TÜRK DİL") || b.includes("TURK DIL"))
+      return "Türk Dili ve Edebiyatı";
+    return "Diğer";
+  };
+
+  const teacherBranchMap = React.useMemo(() => {
+    const map = new Map();
+    (teachers || []).forEach((t) => {
+      if (t?.name) map.set(t.name, t.branch || "");
+    });
+    return map;
+  }, [teachers]);
+
+  // 2. Öğrenci listesi: o tarihe kadar en çok etüt alanlar
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadTopStudents() {
+      if (!supabase) return;
+      try {
+        setTopStudentsLoading(true);
+        setTopStudentsError("");
+        const { data, error } = await supabase
+          .from("etut_atamalari")
+          .select("ogr_no, ogr_ad, sinif, count:ogr_no", { head: false })
+          .lte("tarih", selectedDate)
+          .group("ogr_no, ogr_ad, sinif")
+          .order("count", { ascending: false });
+
+        if (error) {
+          console.error("Top öğrenciler raporu hata:", error);
+          if (mounted)
+            setTopStudentsError("Öğrenci listesi alınırken hata oluştu.");
+          return;
+        }
+
+        if (!mounted) return;
+        setTopStudents(data || []);
+      } catch (e) {
+        console.error("Top öğrenciler raporu beklenmeyen hata:", e);
+        if (mounted)
+          setTopStudentsError(
+            "Öğrenci listesi alınırken beklenmeyen hata oluştu."
+          );
+      } finally {
+        if (mounted) setTopStudentsLoading(false);
+      }
+    }
+
+    async function loadTeacherTotals() {
+      if (!supabase) return;
+      try {
+        setTeacherTotalsLoading(true);
+        setTeacherTotalsError("");
+        const { data, error } = await supabase
+          .from("etut_atamalari")
+          .select("ogretmen, count:ogretmen", { head: false })
+          .lte("tarih", selectedDate)
+          .group("ogretmen")
+          .order("count", { ascending: false });
+
+        if (error) {
+          console.error("Öğretmen toplamları raporu hata:", error);
+          setTeacherTotalsError(
+            "Öğretmen toplam etüt listesi alınırken hata oluştu."
+          );
+          return;
+        }
+        setTeacherTotals(data || []);
+      } catch (e) {
+        console.error("Öğretmen toplamları raporu beklenmeyen hata:", e);
+        setTeacherTotalsError(
+          "Öğretmen toplam etüt listesi alınırken beklenmeyen hata oluştu."
+        );
+      } finally {
+        setTeacherTotalsLoading(false);
+      }
+    }
+
+    loadTopStudents();
+    loadTeacherTotals();
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedDate]);
+
+  // 1. Öğrenci arama: seçilen öğrencinin aldığı etütleri derslere göre kategorile
+  const handleStudentSearch = async () => {
+    const q = studentQuery.trim();
+    if (!q) {
+      setStudentError("Lütfen öğrenci no veya ad girin.");
+      setStudentRecords([]);
+      setStudentSummary({});
+      return;
+    }
+    if (!supabase) return;
+
+    try {
+      setStudentLoading(true);
+      setStudentError("");
+      setStudentRecords([]);
+      setStudentSummary({});
+
+      const isNumeric = /^[0-9]+$/.test(q);
+      let query = supabase
+        .from("etut_atamalari")
+        .select("*")
+        .lte("tarih", selectedDate);
+
+      if (isNumeric) {
+        query = query.eq("ogr_no", q);
+      } else {
+        query = query.ilike("ogr_ad", `%${q}%`);
+      }
+
+      const { data, error } = await query.order("tarih", {
+        ascending: true,
+      });
+
+      if (error) {
+        console.error("Öğrenci arama hata:", error);
+        setStudentError("Öğrenci kayıtları alınırken hata oluştu.");
+        return;
+      }
+
+      const rows = data || [];
+      setStudentRecords(rows);
+
+      // Ders kategorileri (branşlardan)
+      const summary = {};
+      rows.forEach((r) => {
+        const branch = teacherBranchMap.get(r.ogretmen) || "";
+        const cat = categoryFromBranch(branch);
+        summary[cat] = (summary[cat] || 0) + 1;
+      });
+      setStudentSummary(summary);
+    } catch (e) {
+      console.error("Öğrenci arama beklenmeyen hata:", e);
+      setStudentError("Öğrenci kayıtları alınırken beklenmeyen hata oluştu.");
+    } finally {
+      setStudentLoading(false);
+    }
+  };
+
+  // 1. Öğretmen arama: seçilen öğretmenin verdiği etütler (tarihle birlikte)
+  const handleTeacherSearch = async () => {
+    const teacherName = teacherForList.trim();
+    if (!teacherName) {
+      setTeacherSearchError("Lütfen bir öğretmen seçin.");
+      setTeacherRecords([]);
+      return;
+    }
+    if (!supabase) return;
+    try {
+      setTeacherSearchLoading(true);
+      setTeacherSearchError("");
+      setTeacherRecords([]);
+
+      const { data, error } = await supabase
+        .from("etut_atamalari")
+        .select("*")
+        .eq("ogretmen", teacherName)
+        .lte("tarih", selectedDate)
+        .order("tarih", { ascending: true })
+        .order("ogr_ad", { ascending: true });
+
+      if (error) {
+        console.error("Öğretmen arama hata:", error);
+        setTeacherSearchError("Öğretmen kayıtları alınırken hata oluştu.");
+        return;
+      }
+      setTeacherRecords(data || []);
+    } catch (e) {
+      console.error("Öğretmen arama beklenmeyen hata:", e);
+      setTeacherSearchError(
+        "Öğretmen kayıtları alınırken beklenmeyen hata oluştu."
+      );
+    } finally {
+      setTeacherSearchLoading(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 border-t border-gray-200 bg-white p-3 text-xs dark:border-gray-800 dark:bg-gray-900">
+      <h3 className="mb-2 text-sm font-semibold">Raporlar (Rehber Öğretmen)</h3>
+      <p className="mb-3 text-[11px] text-gray-500 dark:text-gray-400">
+        Tarih filtresi: <strong>{selectedDate}</strong> tarihine kadar olan
+        tüm etütler raporlara dahildir.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* ÖĞRENCİ RAPORLARI */}
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Öğrenci Raporları
+          </h4>
+
+          {/* 1. Öğrenci ara */}
+          <div className="mb-3 rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-semibold">
+                1) Öğrenciye göre etüt dağılımı
+              </span>
+            </div>
+            <div className="mb-2 flex gap-1">
+              <input
+                value={studentQuery}
+                onChange={(e) => setStudentQuery(e.target.value)}
+                placeholder="Öğrenci no veya adı"
+                className="h-8 flex-1 rounded-lg border border-gray-300 px-2 text-xs outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+              />
+              <button
+                type="button"
+                onClick={handleStudentSearch}
+                className="h-8 rounded-lg bg-gray-900 px-3 text-[11px] font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+              >
+                Ara
+              </button>
+            </div>
+            {studentLoading && (
+              <div className="text-[11px] text-gray-500">Yükleniyor…</div>
+            )}
+            {studentError && (
+              <div className="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+                {studentError}
+              </div>
+            )}
+
+            {/* Kategorik özet */}
+            {Object.keys(studentSummary).length > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-1 text-[11px]">
+                {["Matematik", "Fizik", "Kimya", "Biyoloji", "Türk Dili ve Edebiyatı", "Diğer"].map(
+                  (cat) =>
+                    studentSummary[cat] && (
+                      <div
+                        key={cat}
+                        className="flex items-center justify-between rounded-lg bg-gray-50 px-2 py-1 dark:bg-gray-900/60"
+                      >
+                        <span>{cat}</span>
+                        <span className="font-semibold">
+                          {studentSummary[cat]}
+                        </span>
+                      </div>
+                    )
+                )}
+              </div>
+            )}
+
+            {/* Kayıt listesi (tarih bazlı) */}
+            {studentRecords.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Tarih</th>
+                      <th className="px-2 py-1 text-left">Saat</th>
+                      <th className="px-2 py-1 text-left">Salon</th>
+                      <th className="px-2 py-1 text-left">Öğretmen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentRecords.map((r, idx) => (
+                      <tr
+                        key={idx}
+                        className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+                      >
+                        <td className="px-2 py-1">{r.tarih}</td>
+                        <td className="px-2 py-1">{r.saat}. saat</td>
+                        <td className="px-2 py-1">{r.salon}</td>
+                        <td className="px-2 py-1">{r.ogretmen}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!studentLoading &&
+              !studentError &&
+              studentQuery &&
+              studentRecords.length === 0 && (
+                <div className="mt-1 text-[11px] text-gray-500">
+                  Bu öğrenci için {selectedDate} tarihine kadar kayıt
+                  bulunamadı.
+                </div>
+              )}
+          </div>
+
+          {/* 2. Tüm öğrenciler – çoktan aza sıralı */}
+          <div className="rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-semibold">
+                2) {selectedDate} tarihine kadar en çok etüt alan öğrenciler
+              </span>
+            </div>
+            {topStudentsLoading && (
+              <div className="text-[11px] text-gray-500">Yükleniyor…</div>
+            )}
+            {topStudentsError && (
+              <div className="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+                {topStudentsError}
+              </div>
+            )}
+            {!topStudentsLoading && topStudents.length > 0 && (
+              <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+                    <tr>
+                      <th className="px-2 py-1 text-left">#</th>
+                      <th className="px-2 py-1 text-left">No</th>
+                      <th className="px-2 py-1 text-left">Ad Soyad</th>
+                      <th className="px-2 py-1 text-left">Sınıf</th>
+                      <th className="px-2 py-1 text-right">Etüt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topStudents.slice(0, 100).map((s, idx) => (
+                      <tr
+                        key={`${s.ogr_no}-${idx}`}
+                        className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+                      >
+                        <td className="px-2 py-1">{idx + 1}</td>
+                        <td className="px-2 py-1">{s.ogr_no}</td>
+                        <td className="px-2 py-1">{s.ogr_ad}</td>
+                        <td className="px-2 py-1">{s.sinif}</td>
+                        <td className="px-2 py-1 text-right font-semibold">
+                          {s.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!topStudentsLoading &&
+              !topStudentsError &&
+              topStudents.length === 0 && (
+                <div className="text-[11px] text-gray-500">
+                  {selectedDate} tarihine kadar etüt kaydı bulunamadı.
+                </div>
+              )}
+          </div>
+        </div>
+
+        {/* ÖĞRETMEN RAPORLARI */}
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Öğretmen Raporları
+          </h4>
+
+          {/* 1) Öğretmene göre liste */}
+          <div className="mb-3 rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-semibold">
+                1) Öğretmene göre etüt listesi
+              </span>
+            </div>
+            <div className="mb-2 flex gap-1">
+              <select
+                value={teacherForList}
+                onChange={(e) => setTeacherForList(e.target.value)}
+                className="h-8 flex-1 rounded-lg border border-gray-300 px-2 text-xs outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+              >
+                <option value="">Öğretmen seçin…</option>
+                {(teachers || []).map((t) => (
+                  <option key={t.id} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleTeacherSearch}
+                className="h-8 rounded-lg bg-gray-900 px-3 text-[11px] font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+              >
+                Getir
+              </button>
+            </div>
+            {teacherSearchLoading && (
+              <div className="text-[11px] text-gray-500">Yükleniyor…</div>
+            )}
+            {teacherSearchError && (
+              <div className="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+                {teacherSearchError}
+              </div>
+            )}
+            {teacherRecords.length > 0 && (
+              <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Tarih</th>
+                      <th className="px-2 py-1 text-left">Saat</th>
+                      <th className="px-2 py-1 text-left">Öğrenci</th>
+                      <th className="px-2 py-1 text-left">Sınıf</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teacherRecords.map((r, idx) => (
+                      <tr
+                        key={idx}
+                        className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+                      >
+                        <td className="px-2 py-1">{r.tarih}</td>
+                        <td className="px-2 py-1">{r.saat}. saat</td>
+                        <td className="px-2 py-1">
+                          {r.ogr_no} – {r.ogr_ad}
+                        </td>
+                        <td className="px-2 py-1">{r.sinif}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!teacherSearchLoading &&
+              !teacherSearchError &&
+              teacherForList &&
+              teacherRecords.length === 0 && (
+                <div className="mt-1 text-[11px] text-gray-500">
+                  Bu öğretmen için {selectedDate} tarihine kadar etüt kaydı
+                  bulunamadı.
+                </div>
+              )}
+          </div>
+
+          {/* 2) Tüm öğretmenlerin toplam etüt sayıları */}
+          <div className="rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-semibold">
+                2) {selectedDate} tarihine kadar öğretmenlerin toplam etüt
+                sayıları
+              </span>
+            </div>
+            {teacherTotalsLoading && (
+              <div className="text-[11px] text-gray-500">Yükleniyor…</div>
+            )}
+            {teacherTotalsError && (
+              <div className="mt-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+                {teacherTotalsError}
+              </div>
+            )}
+            {!teacherTotalsLoading && teacherTotals.length > 0 && (
+              <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+                    <tr>
+                      <th className="px-2 py-1 text-left">#</th>
+                      <th className="px-2 py-1 text-left">Öğretmen</th>
+                      <th className="px-2 py-1 text-right">Etüt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teacherTotals.slice(0, 100).map((t, idx) => (
+                      <tr
+                        key={`${t.ogretmen || "bos"}-${idx}`}
+                        className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+                      >
+                        <td className="px-2 py-1">{idx + 1}</td>
+                        <td className="px-2 py-1">
+                          {t.ogretmen || "(Öğretmen adı yok)"}
+                        </td>
+                        <td className="px-2 py-1 text-right font-semibold">
+                          {t.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {!teacherTotalsLoading &&
+              !teacherTotalsError &&
+              teacherTotals.length === 0 && (
+                <div className="text-[11px] text-gray-500">
+                  {selectedDate} tarihine kadar etüt kaydı bulunamadı.
+                </div>
+              )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
