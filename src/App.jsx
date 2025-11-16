@@ -1808,8 +1808,225 @@ function AdminReportsSection({ selectedDate, teachers }) {
     return map;
   }, [teachers]);
 
-  // 2. Öğrenci listesi & 2. Öğretmen toplamları:
-  // SQL'de group by yapmayıp tüm kayıtları çekip JS tarafında grupluyoruz.
+  // Ortak PDF açma yardımcı fonksiyonu
+  const openPdfWindow = (title, innerHtml) => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const style = `
+      <style>
+        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 16px; }
+        h1 { font-size: 18px; margin: 0 0 8px; }
+        h2 { font-size: 16px; margin: 16px 0 8px; }
+        p { font-size: 12px; margin: 4px 0; color: #4b5563; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 12px; }
+        th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+        th { background: #f3f4f6; font-weight: 600; }
+        .small { font-size: 11px; color: #6b7280; }
+      </style>
+    `;
+    win.document.write(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>${title}</title>
+${style}
+</head>
+<body>
+${innerHtml}
+<script>window.print();</script>
+</body>
+</html>`);
+    win.document.close();
+  };
+
+  // PDF 1: Öğrenciye göre etüt dağılımı
+  const exportStudentDetailPdf = () => {
+    if (!studentRecords.length || !studentQuery) return;
+    const stu = studentRecords[0];
+    const headerName = (stu.ogr_ad || "").trim() || "(Ad bilgisi yok)";
+    const headerNo = (stu.ogr_no || "").toString().trim();
+    const headerClass = (stu.sinif || "").trim();
+
+    const summaryRows = [
+      "Matematik",
+      "Fizik",
+      "Kimya",
+      "Biyoloji",
+      "Türk Dili ve Edebiyatı",
+      "Diğer",
+    ]
+      .filter((cat) => studentSummary[cat])
+      .map(
+        (cat) =>
+          `<tr><td>${cat}</td><td>${studentSummary[cat] || 0}</td></tr>`
+      )
+      .join("") || '<tr><td colspan="2">Kategori bulunamadı</td></tr>';
+
+    const detailRows =
+      studentRecords
+        .map(
+          (r) =>
+            `<tr>
+              <td>${r.tarih}</td>
+              <td>${r.saat}. saat</td>
+              <td>${r.salon}</td>
+              <td>${r.ogretmen || ""}</td>
+            </tr>`
+        )
+        .join("") || '<tr><td colspan="4">Kayıt bulunamadı</td></tr>';
+
+    const html = `
+      <h1>Öğrenci Etüt Raporu</h1>
+      <p class="small">Rapor tarihi: ${new Date().toLocaleString(
+        "tr-TR"
+      )}</p>
+      <p><strong>Filtre:</strong> ${selectedDate} tarihine kadar olan tüm etütler</p>
+      <p><strong>Öğrenci:</strong> ${
+        headerNo ? headerNo + " - " : ""
+      }${headerName}${headerClass ? " (" + headerClass + ")" : ""}</p>
+
+      <h2>Ders Kategorilerine Göre Etüt Sayıları</h2>
+      <table>
+        <thead><tr><th>Ders</th><th>Etüt Sayısı</th></tr></thead>
+        <tbody>${summaryRows}</tbody>
+      </table>
+
+      <h2>Tarih Bazlı Etüt Listesi</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Tarih</th>
+            <th>Saat</th>
+            <th>Salon</th>
+            <th>Öğretmen</th>
+          </tr>
+        </thead>
+        <tbody>${detailRows}</tbody>
+      </table>
+    `;
+    openPdfWindow("Öğrenci Etüt Raporu", html);
+  };
+
+  // PDF 2: En çok etüt alan öğrenciler
+  const exportTopStudentsPdf = () => {
+    if (!topStudents.length) return;
+    const rows =
+      topStudents
+        .map(
+          (s, idx) =>
+            `<tr>
+              <td>${idx + 1}</td>
+              <td>${s.ogr_no || ""}</td>
+              <td>${s.ogr_ad || ""}</td>
+              <td>${s.sinif || ""}</td>
+              <td>${s.count || 0}</td>
+            </tr>`
+        )
+        .join("") || '<tr><td colspan="5">Kayıt bulunamadı</td></tr>';
+
+    const html = `
+      <h1>En Çok Etüt Alan Öğrenciler</h1>
+      <p class="small">Rapor tarihi: ${new Date().toLocaleString(
+        "tr-TR"
+      )}</p>
+      <p><strong>Filtre:</strong> ${selectedDate} tarihine kadar olan tüm etütler</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Öğrenci No</th>
+            <th>Ad Soyad</th>
+            <th>Sınıf</th>
+            <th>Etüt Sayısı</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    openPdfWindow("Öğrenci Toplu Etüt Raporu", html);
+  };
+
+  // PDF 3: Öğretmene göre detay listesi
+  const exportTeacherDetailPdf = () => {
+    if (!teacherRecords.length || !teacherForList) return;
+
+    const rows =
+      teacherRecords
+        .map(
+          (r) =>
+            `<tr>
+              <td>${r.tarih}</td>
+              <td>${r.saat}. saat</td>
+              <td>${r.ogr_no || ""}</td>
+              <td>${r.ogr_ad || ""}</td>
+              <td>${r.sinif || ""}</td>
+            </tr>`
+        )
+        .join("") || '<tr><td colspan="5">Kayıt bulunamadı</td></tr>';
+
+    const html = `
+      <h1>Öğretmen Etüt Raporu</h1>
+      <p class="small">Rapor tarihi: ${new Date().toLocaleString(
+        "tr-TR"
+      )}</p>
+      <p><strong>Filtre:</strong> ${selectedDate} tarihine kadar olan tüm etütler</p>
+      <p><strong>Öğretmen:</strong> ${teacherForList}</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Tarih</th>
+            <th>Saat</th>
+            <th>Öğrenci No</th>
+            <th>Öğrenci Adı</th>
+            <th>Sınıf</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    openPdfWindow("Öğretmen Detay Etüt Raporu", html);
+  };
+
+  // PDF 4: Öğretmenlerin toplam etüt sayıları
+  const exportTeacherTotalsPdf = () => {
+    if (!teacherTotals.length) return;
+
+    const rows =
+      teacherTotals
+        .map(
+          (t, idx) =>
+            `<tr>
+              <td>${idx + 1}</td>
+              <td>${t.ogretmen || "(Öğretmen adı yok)"}</td>
+              <td>${t.count || 0}</td>
+            </tr>`
+        )
+        .join("") || '<tr><td colspan="3">Kayıt bulunamadı</td></tr>';
+
+    const html = `
+      <h1>Öğretmen Toplam Etüt Raporu</h1>
+      <p class="small">Rapor tarihi: ${new Date().toLocaleString(
+        "tr-TR"
+      )}</p>
+      <p><strong>Filtre:</strong> ${selectedDate} tarihine kadar olan tüm etütler</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Öğretmen</th>
+            <th>Toplam Etüt Sayısı</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    openPdfWindow("Öğretmen Toplam Etüt Raporu", html);
+  };
+
+  // 2. Öğrenci listesi & öğretmen toplamları: JS tarafında gruplama
   useEffect(() => {
     let mounted = true;
 
@@ -1843,7 +2060,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
 
         const rows = data || [];
 
-        // --- Öğrenci bazlı toplama ---
+        // Öğrenci bazlı toplama
         const stuMap = new Map();
         rows.forEach((r) => {
           const key =
@@ -1857,7 +2074,6 @@ function AdminReportsSection({ selectedDate, teachers }) {
             count: 0,
           };
           prev.count += 1;
-          // Son sinif, ad, no bilgisi ile güncelle
           prev.ogr_no = r.ogr_no || prev.ogr_no;
           prev.ogr_ad = r.ogr_ad || prev.ogr_ad;
           prev.sinif = r.sinif || prev.sinif;
@@ -1869,7 +2085,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
           return (a.ogr_ad || "").localeCompare(b.ogr_ad || "", "tr");
         });
 
-        // --- Öğretmen bazlı toplama ---
+        // Öğretmen bazlı toplama
         const teacherMap = new Map();
         rows.forEach((r) => {
           const key = r.ogretmen || "(Öğretmen adı yok)";
@@ -1909,7 +2125,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
     };
   }, [selectedDate]);
 
-  // 1. Öğrenci arama: seçilen öğrencinin aldığı etütleri derslere göre kategorile
+  // 1. Öğrenci arama
   const handleStudentSearch = async () => {
     const q = studentQuery.trim();
     if (!q) {
@@ -1951,7 +2167,6 @@ function AdminReportsSection({ selectedDate, teachers }) {
       const rows = data || [];
       setStudentRecords(rows);
 
-      // Ders kategorileri (branşlardan)
       const summary = {};
       rows.forEach((r) => {
         const branch = teacherBranchMap.get(r.ogretmen) || "";
@@ -1967,7 +2182,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
     }
   };
 
-  // 1. Öğretmen arama: seçilen öğretmenin verdiği etütler (tarihle birlikte)
+  // 1. Öğretmen arama
   const handleTeacherSearch = async () => {
     const teacherName = teacherForList.trim();
     if (!teacherName) {
@@ -2016,8 +2231,8 @@ function AdminReportsSection({ selectedDate, teachers }) {
       <div className="grid gap-4 md:grid-cols-2">
         {/* ÖĞRENCİ RAPORLARI */}
         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Öğrenci Raporları
+          <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-500">
+            <span>Öğrenci Raporları</span>
           </h4>
 
           {/* 1. Öğrenci ara */}
@@ -2026,6 +2241,15 @@ function AdminReportsSection({ selectedDate, teachers }) {
               <span className="text-[11px] font-semibold">
                 1) Öğrenciye göre etüt dağılımı
               </span>
+              {studentRecords.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportStudentDetailPdf}
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-[10px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  PDF’e Aktar
+                </button>
+              )}
             </div>
             <div className="mb-2 flex gap-1">
               <input
@@ -2078,7 +2302,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
               </div>
             )}
 
-            {/* Kayıt listesi (tarih bazlı) */}
+            {/* Kayıt listesi */}
             {studentRecords.length > 0 && (
               <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-[11px]">
@@ -2124,6 +2348,15 @@ function AdminReportsSection({ selectedDate, teachers }) {
               <span className="text-[11px] font-semibold">
                 2) {selectedDate} tarihine kadar en çok etüt alan öğrenciler
               </span>
+              {topStudents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportTopStudentsPdf}
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-[10px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  PDF’e Aktar
+                </button>
+              )}
             </div>
             {topStudentsLoading && (
               <div className="text-[11px] text-gray-500">Yükleniyor…</div>
@@ -2186,6 +2419,15 @@ function AdminReportsSection({ selectedDate, teachers }) {
               <span className="text-[11px] font-semibold">
                 1) Öğretmene göre etüt listesi
               </span>
+              {teacherRecords.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportTeacherDetailPdf}
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-[10px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  PDF’e Aktar
+                </button>
+              )}
             </div>
             <div className="mb-2 flex gap-1">
               <select
@@ -2263,6 +2505,15 @@ function AdminReportsSection({ selectedDate, teachers }) {
                 2) {selectedDate} tarihine kadar öğretmenlerin toplam etüt
                 sayıları
               </span>
+              {teacherTotals.length > 0 && (
+                <button
+                  type="button"
+                  onClick={exportTeacherTotalsPdf}
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-[10px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  PDF’e Aktar
+                </button>
+              )}
             </div>
             {teacherTotalsLoading && (
               <div className="text-[11px] text-gray-500">Yükleniyor…</div>
@@ -2314,6 +2565,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
     </div>
   );
 }
+
 
 // ——— Excel (.xlsx) okuma ———
 function parseStudentExcel(file, setStudentDb, supabase) {
