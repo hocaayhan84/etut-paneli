@@ -2256,7 +2256,7 @@ ${innerHtml}
       </p>
             {/* Özet kutuları: Bugün ve toplam etüt sayısı */}
       <div className="mb-3 grid gap-2 text-xs md:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/40">
+        <div className="rounded-xl border border-purple-200 bg-purple-50/60 px-3 py-2 shadow-sm backdrop-blur-sm dark:border-purple-900/40 dark:bg-purple-900/20">
           <div className="text-[11px] text-gray-500 dark:text-gray-400">
             Bugün yapılan etüt sayısı
           </div>
@@ -2268,7 +2268,7 @@ ${innerHtml}
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/40">
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50/60 px-3 py-2 shadow-sm backdrop-blur-sm dark:border-cyan-900/40 dark:bg-cyan-900/20">
           <div className="text-[11px] text-gray-500 dark:text-gray-400">
             Toplam etüt sayısı
           </div>
@@ -2283,7 +2283,7 @@ ${innerHtml}
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* ÖĞRENCİ RAPORLARI */}
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-3 shadow-sm backdrop-blur-sm dark:border-blue-900/40 dark:bg-blue-900/20">
           <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-500">
             <span>Öğrenci Raporları</span>
           </h4>
@@ -2359,7 +2359,7 @@ ${innerHtml}
             {studentRecords.length > 0 && (
               <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-[11px]">
-                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+                  <thead className="bg-white/70 backdrop-blur-sm text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-800/30">
                     <tr>
                       <th className="px-2 py-1 text-left">Tarih</th>
                       <th className="px-2 py-1 text-left">Saat</th>
@@ -2422,8 +2422,7 @@ ${innerHtml}
             {!topStudentsLoading && topStudents.length > 0 && (
               <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-[11px]">
-                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
-                    <tr>
+                  <thead className="bg-white/70 backdrop-blur-sm text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-800/30">
                       <th className="px-2 py-1 text-left">#</th>
                       <th className="px-2 py-1 text-left">No</th>
                       <th className="px-2 py-1 text-left">Ad Soyad</th>
@@ -2461,8 +2460,8 @@ ${innerHtml}
         </div>
 
         {/* ÖĞRETMEN RAPORLARI */}
-        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-sm backdrop-blur-sm dark:border-emerald-900/40 dark:bg-emerald-900/20">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
             Öğretmen Raporları
           </h4>
 
@@ -2514,7 +2513,7 @@ ${innerHtml}
             {teacherRecords.length > 0 && (
               <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-[11px]">
-                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
+                  <thead className="bg-white/70 backdrop-blur-sm text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-800/30">
                     <tr>
                       <th className="px-2 py-1 text-left">Tarih</th>
                       <th className="px-2 py-1 text-left">Saat</th>
@@ -2579,8 +2578,7 @@ ${innerHtml}
             {!teacherTotalsLoading && teacherTotals.length > 0 && (
               <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-800">
                 <table className="w-full text-[11px]">
-                  <thead className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/60">
-                    <tr>
+                  <thead className="bg-white/70 backdrop-blur-sm text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-800/30">
                       <th className="px-2 py-1 text-left">#</th>
                       <th className="px-2 py-1 text-left">Öğretmen</th>
                       <th className="px-2 py-1 text-right">Etüt</th>
