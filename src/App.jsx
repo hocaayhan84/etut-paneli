@@ -770,11 +770,11 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
     syncHourRoom(hour, col, draft);
   };
 
-  const isCellAssignedToMe = (hour, col) =>
+    const isCellAssignedToMe = (hour, col) =>
     (dayCells[`${hour}-${col}-teacher`] || "") === currentTeacher;
 
   const cellVisible = (hour, col) =>
-    currentRole === "admin" || !onlyMine ? true : isCellAssignedToMe(hour, col);
+    currentRole === "admin" ? true : isCellAssignedToMe(hour, col);
 
   if (typeof window !== "undefined") {
     window.__etutState__ = { rooms, hours, cells: dayCells, date: selectedDate };
