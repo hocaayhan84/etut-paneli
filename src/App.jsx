@@ -1808,75 +1808,102 @@ function AdminReportsSection({ selectedDate, teachers }) {
     return map;
   }, [teachers]);
 
-  // 2. Öğrenci listesi: o tarihe kadar en çok etüt alanlar
+  // 2. Öğrenci listesi & 2. Öğretmen toplamları:
+  // SQL'de group by yapmayıp tüm kayıtları çekip JS tarafında grupluyoruz.
   useEffect(() => {
     let mounted = true;
 
-    async function loadTopStudents() {
+    async function loadAggregatedData() {
       if (!supabase) return;
       try {
         setTopStudentsLoading(true);
+        setTeacherTotalsLoading(true);
         setTopStudentsError("");
+        setTeacherTotalsError("");
+
         const { data, error } = await supabase
           .from("etut_atamalari")
-          .select("ogr_no, ogr_ad, sinif, count:ogr_no", { head: false })
-          .lte("tarih", selectedDate)
-          .group("ogr_no, ogr_ad, sinif")
-          .order("count", { ascending: false });
+          .select("*")
+          .lte("tarih", selectedDate);
 
         if (error) {
-          console.error("Top öğrenciler raporu hata:", error);
-          if (mounted)
-            setTopStudentsError("Öğrenci listesi alınırken hata oluştu.");
+          console.error("Toplu raporlar select hata:", error);
+          if (mounted) {
+            setTopStudentsError(
+              "Öğrenci listesi alınırken beklenmeyen hata oluştu."
+            );
+            setTeacherTotalsError(
+              "Öğretmen toplam etüt listesi alınırken beklenmeyen hata oluştu."
+            );
+          }
           return;
         }
 
         if (!mounted) return;
-        setTopStudents(data || []);
+
+        const rows = data || [];
+
+        // --- Öğrenci bazlı toplama ---
+        const stuMap = new Map();
+        rows.forEach((r) => {
+          const key =
+            (r.ogr_no && r.ogr_no.toString().trim()) ||
+            (r.ogr_ad && r.ogr_ad.trim()) ||
+            "NO-ID";
+          const prev = stuMap.get(key) || {
+            ogr_no: r.ogr_no || "",
+            ogr_ad: r.ogr_ad || "",
+            sinif: r.sinif || "",
+            count: 0,
+          };
+          prev.count += 1;
+          // Son sinif, ad, no bilgisi ile güncelle
+          prev.ogr_no = r.ogr_no || prev.ogr_no;
+          prev.ogr_ad = r.ogr_ad || prev.ogr_ad;
+          prev.sinif = r.sinif || prev.sinif;
+          stuMap.set(key, prev);
+        });
+
+        const stuArr = Array.from(stuMap.values()).sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return (a.ogr_ad || "").localeCompare(b.ogr_ad || "", "tr");
+        });
+
+        // --- Öğretmen bazlı toplama ---
+        const teacherMap = new Map();
+        rows.forEach((r) => {
+          const key = r.ogretmen || "(Öğretmen adı yok)";
+          const prev = teacherMap.get(key) || { ogretmen: key, count: 0 };
+          prev.count += 1;
+          teacherMap.set(key, prev);
+        });
+
+        const teacherArr = Array.from(teacherMap.values()).sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return (a.ogretmen || "").localeCompare(b.ogretmen || "", "tr");
+        });
+
+        setTopStudents(stuArr);
+        setTeacherTotals(teacherArr);
       } catch (e) {
-        console.error("Top öğrenciler raporu beklenmeyen hata:", e);
-        if (mounted)
+        console.error("Toplu raporlar beklenmeyen hata:", e);
+        if (mounted) {
           setTopStudentsError(
             "Öğrenci listesi alınırken beklenmeyen hata oluştu."
           );
-      } finally {
-        if (mounted) setTopStudentsLoading(false);
-      }
-    }
-
-    async function loadTeacherTotals() {
-      if (!supabase) return;
-      try {
-        setTeacherTotalsLoading(true);
-        setTeacherTotalsError("");
-        const { data, error } = await supabase
-          .from("etut_atamalari")
-          .select("ogretmen, count:ogretmen", { head: false })
-          .lte("tarih", selectedDate)
-          .group("ogretmen")
-          .order("count", { ascending: false });
-
-        if (error) {
-          console.error("Öğretmen toplamları raporu hata:", error);
           setTeacherTotalsError(
-            "Öğretmen toplam etüt listesi alınırken hata oluştu."
+            "Öğretmen toplam etüt listesi alınırken beklenmeyen hata oluştu."
           );
-          return;
         }
-        setTeacherTotals(data || []);
-      } catch (e) {
-        console.error("Öğretmen toplamları raporu beklenmeyen hata:", e);
-        setTeacherTotalsError(
-          "Öğretmen toplam etüt listesi alınırken beklenmeyen hata oluştu."
-        );
       } finally {
-        setTeacherTotalsLoading(false);
+        if (mounted) {
+          setTopStudentsLoading(false);
+          setTeacherTotalsLoading(false);
+        }
       }
     }
 
-    loadTopStudents();
-    loadTeacherTotals();
-
+    loadAggregatedData();
     return () => {
       mounted = false;
     };
@@ -2027,7 +2054,14 @@ function AdminReportsSection({ selectedDate, teachers }) {
             {/* Kategorik özet */}
             {Object.keys(studentSummary).length > 0 && (
               <div className="mt-2 grid grid-cols-2 gap-1 text-[11px]">
-                {["Matematik", "Fizik", "Kimya", "Biyoloji", "Türk Dili ve Edebiyatı", "Diğer"].map(
+                {[
+                  "Matematik",
+                  "Fizik",
+                  "Kimya",
+                  "Biyoloji",
+                  "Türk Dili ve Edebiyatı",
+                  "Diğer",
+                ].map(
                   (cat) =>
                     studentSummary[cat] && (
                       <div
