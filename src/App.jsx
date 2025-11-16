@@ -86,6 +86,44 @@ export default function App() {
 
   // Öğrenci veritabanı (No -> {name, class})
   const [studentDb, setStudentDb] = useState({});
+  // Öğrenci veritabanını Supabase'ten yükle
+useEffect(() => {
+  if (!supabase) return;
+  let mounted = true;
+
+  async function fetchStudents() {
+    try {
+      const { data, error } = await supabase
+        .from(STUDENTS_TABLE)
+        .select("*");
+
+      if (error) {
+        console.error("Öğrenciler yüklenirken hata:", error);
+        return;
+      }
+
+      if (!mounted) return;
+
+      const db = {};
+      (data || []).forEach((row) => {
+        if (!row.ogr_no) return;
+        db[String(row.ogr_no).trim()] = {
+          name: row.ad || "",
+          class: row.sinif || "",
+        };
+      });
+
+      setStudentDb(db);
+    } catch (e) {
+      console.error("Öğrenciler yüklenirken beklenmeyen hata:", e);
+    }
+  }
+
+  fetchStudents();
+  return () => {
+    mounted = false;
+  };
+}, []);
 
   // ——— Yönetici için Öğretmen Yönetimi Form State ———
   const [editingTeacherId, setEditingTeacherId] = useState(null);
