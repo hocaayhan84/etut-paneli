@@ -647,7 +647,6 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
 
   const [conflicts, setConflicts] = useState(new Set());
   const [warnings, setWarnings] = useState([]);
-  const [onlyMine, setOnlyMine] = useState(true);
 
   const [dbError, setDbError] = useState("");
   const [loading, setLoading] = useState(false);
