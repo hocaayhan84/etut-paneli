@@ -1504,54 +1504,63 @@ function EtutTable({
             {(myTodaySessions.length > 0 || myFutureSessions.length > 0) && (
               <div className="grid gap-3 md:grid-cols-2">
                 {/* Bugünkü etütler */}
-                <div className="rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900/80">
-                  <div className="mb-1 text-[11px] font-semibold text-gray-700 dark:text-gray-100">
-                    Bugünkü Etütler ({selectedDate})
-                  </div>
-                  <div className="space-y-1">
+                <div className="rounded-xl bg-blue-50/60 p-2 shadow-sm border border-blue-200 dark:bg-blue-900/20 dark:border-blue-900">
+  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-200">
+    <span className="text-base">📅</span>
+    <span>Bugünkü Etütler ({selectedDate})</span>
+  </div>
+  <div className="space-y-1">
                     {myTodaySessions.map((s, idx) => (
-                      <div
-                        key={`today-${s.ogr_no || idx}-${s.saat}-${s.salon}`}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] dark:border-gray-700 dark:bg-gray-900"
-                      >
-                        <div className="font-semibold">
-                          {s.ogr_ad || "İsimsiz Öğrenci"}{" "}
-                          <span className="text-[10px] text-gray-500">
-                            ({s.ogr_no || "no yok"})
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-gray-500">
-                          Sınıf: {s.sinif || "-"} • Saat: {s.saat}. ders • Salon:{" "}
-                          {s.salon || "-"}
-                        </div>
-                      </div>
+                     <div
+  key={`today-${s.ogr_no || idx}-${s.saat}-${s.salon}`}
+  className="rounded-lg border border-blue-300 bg-blue-100 px-2 py-1 text-[11px] shadow-sm dark:border-blue-800 dark:bg-blue-900/40"
+>
+  <div className="font-semibold flex items-center gap-1">
+    <span>👤</span>
+    <span>{s.ogr_ad || "İsimsiz Öğrenci"}</span>
+    <span className="text-[10px] text-blue-700 dark:text-blue-300">
+      • #{s.ogr_no || "-"}
+    </span>
+  </div>
+
+  <div className="text-[10px] text-blue-700 dark:text-blue-300 flex flex-wrap gap-2 mt-1">
+    <span>🏫 {s.sinif || "-"}</span>
+    <span>⏰ {s.saat}. ders</span>
+    <span>🏛️ Salon {s.salon || "-"}</span>
+  </div>
+</div>
                     ))}
                   </div>
                 </div>
 
                 {/* İleri tarihli etütler */}
-                <div className="rounded-xl bg-white p-2 shadow-sm dark:bg-gray-900/80">
-                  <div className="mb-1 text-[11px] font-semibold text-gray-700 dark:text-gray-100">
-                    İleri Tarihli Etütler (Bu Hafta)
-                  </div>
+                <div className="rounded-xl bg-purple-50/60 p-2 shadow-sm border border-purple-200 dark:bg-purple-900/20 dark:border-purple-900/40">
+  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-purple-700 dark:text-purple-200">
+    <span className="text-base">⏭️</span>
+    <span>İleri Tarihli Etütler (Bu Hafta)</span>
+  </div>
                   <div className="space-y-1">
                     {myFutureSessions.map((s, idx) => (
-                      <div
-                        key={`future-${s.ogr_no || idx}-${s.tarih}-${s.saat}-${s.salon}`}
-                        className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] dark:border-gray-700 dark:bg-gray-900"
-                      >
-                        <div className="font-semibold">
-                          {s.ogr_ad || "İsimsiz Öğrenci"}{" "}
-                          <span className="text-[10px] text-gray-500">
-                            ({s.ogr_no || "no yok"})
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-gray-500">
-                          Tarih: {s.tarih} • Sınıf: {s.sinif || "-"} • Saat:{" "}
-                          {s.saat}. ders • Salon: {s.salon || "-"}
-                        </div>
-                      </div>
-                    ))}
+  <div
+    key={`future-${s.ogr_no || idx}-${s.tarih}-${s.saat}-${s.salon}`}
+    className="rounded-lg border border-purple-300 bg-purple-100 px-2 py-1 text-[11px] shadow-sm dark:border-purple-800 dark:bg-purple-900/40"
+  >
+    <div className="font-semibold flex items-center gap-1">
+      <span>👤</span>
+      <span>{s.ogr_ad || "İsimsiz Öğrenci"}</span>
+      <span className="text-[10px] text-purple-700 dark:text-purple-300">
+        • #{s.ogr_no || "-"}
+      </span>
+    </div>
+
+    <div className="text-[10px] text-purple-700 dark:text-purple-300 flex flex-wrap gap-2 mt-1">
+      <span>📅 {s.tarih}</span>
+      <span>🏫 {s.sinif || "-"}</span>
+      <span>⏰ {s.saat}. ders</span>
+      <span>🏛️ Salon {s.salon || "-"}</span>
+    </div>
+  </div>
+))}
                   </div>
                 </div>
               </div>
