@@ -21,6 +21,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const ADMIN_USER = { name: "AYHAN KAPICI (Rehber Öğretmen)", role: "admin" };
 const ADMIN_PASSWORD = "4321"; // Yönetici şifresi
 const TEACHERS_TABLE = "etut_ogretmenler";
+const STUDENTS_TABLE = "etut_ogrenciler";
 
 // ——— Yardımcı Fonksiyonlar ———
 export function localYMDUtil(d) {
