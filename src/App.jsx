@@ -366,11 +366,15 @@ export default function App() {
                   </h2>
                   <div className="flex flex-col items-end gap-1 text-xs text-gray-500 dark:text-gray-400 md:flex-row md:items-center md:gap-3">
                     <span>
-                      Rol:{" "}
-                      <strong>
-                        {currentRole === "admin" ? "Yönetici" : "Öğretmen"}
-                      </strong>
-                    </span>
+  Rol:{" "}
+  <strong>
+    {currentRole === "admin"
+      ? "Rehber / Yönetici"
+      : currentRole === "manager"
+      ? "Müdür / Müdür Yard."
+      : "Öğretmen"}
+  </strong>
+</span>
                     <span>
                       Sütunlar: Etüt Adları • Satırlar: 1–8. saat
                     </span>
@@ -569,7 +573,7 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
       return;
     }
 
-    const teacher = teachers.find((t) => t.name === selected);
+        const teacher = teachers.find((t) => t.name === selected);
     if (!teacher) {
       setErr("Bu isimde bir öğretmen bulunamadı.");
       return;
@@ -578,7 +582,12 @@ function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
       setErr("Şifre hatalı.");
       return;
     }
-    onSuccess(teacher.name, "teacher");
+
+    // Müdür / Müdür yardımcısı için özel rol
+    const rawBranch = (teacher.branch || "").toLocaleUpperCase("tr-TR");
+    const isManager = rawBranch.includes("MÜDÜR");
+
+    onSuccess(teacher.name, isManager ? "manager" : "teacher");
   };
 
   const options = [
@@ -877,11 +886,13 @@ function EtutTable({
     syncHourRoom(hour, col, draft);
   };
 
-  const isCellAssignedToMe = (hour, col) =>
+    const isCellAssignedToMe = (hour, col) =>
     (dayCells[`${hour}-${col}-teacher`] || "") === currentTeacher;
 
   const cellVisible = (hour, col) =>
-    currentRole === "admin" ? true : isCellAssignedToMe(hour, col);
+    currentRole === "admin" || currentRole === "manager"
+      ? true
+      : isCellAssignedToMe(hour, col);
 
   if (typeof window !== "undefined") {
     window.__etutState__ = { rooms, hours, cells: dayCells, date: selectedDate };
@@ -1339,36 +1350,42 @@ function EtutTable({
           )}
 
           {/* Yönetici aksiyonları */}
-          {currentRole === "admin" && (
-            <>
-              <button
-                onClick={() =>
-                  setRooms((r) => [...r, `ETÜT ${r.length + 1}`])
-                }
-                className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-              >
-                Salon Ekle
-              </button>
-              <button
-                onClick={exportCSV}
-                className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-              >
-                CSV’e Aktar
-              </button>
-              <button
-                onClick={exportXLSX}
-                className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-              >
-                .XLSX’e Aktar
-              </button>
-              <button
-                onClick={exportPdf}
-                className="rounded-xl bg-gray-900 px-3 py-1 text-xs font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
-              >
-                PDF’e Aktar
-              </button>
-            </>
-          )}
+
+/* 6.1 Sadece admin salon ekleyebilir */
+{currentRole === "admin" && (
+  <button
+    onClick={() =>
+      setRooms((r) => [...r, `ETÜT ${r.length + 1}`])
+    }
+    className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+  >
+    Salon Ekle
+  </button>
+)}
+
+/* 6.2 Admin + Manager tabloyu dışa aktarabilir */
+{(currentRole === "admin" || currentRole === "manager") && (
+  <>
+    <button
+      onClick={exportCSV}
+      className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+    >
+      CSV’e Aktar
+    </button>
+    <button
+      onClick={exportXLSX}
+      className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+    >
+      .XLSX’e Aktar
+    </button>
+    <button
+      onClick={exportPdf}
+      className="rounded-xl bg-gray-900 px-3 py-1 text-xs font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+    >
+      PDF’e Aktar
+    </button>
+  </>
+)}
         </div>
       </div>
 
@@ -1757,13 +1774,13 @@ function EtutTable({
         saklanmaktadır. Öğretmen farklı bir bilgisayardan giriş yapsa bile
         aynı tarihteki atamaları görebilir.
       </div>
-      {/* SADECE REHBER ÖĞRETMEN İÇİN RAPORLAR BÖLÜMÜ */}
-      {currentRole === "admin" && (
-        <AdminReportsSection
-          selectedDate={selectedDate}
-          teachers={teachers}
-        />
-      )}
+      {/* Rehber öğretmen + Müdür için RAPORLAR BÖLÜMÜ */}
+{(currentRole === "admin" || currentRole === "manager") && (
+  <AdminReportsSection
+    selectedDate={selectedDate}
+    teachers={teachers}
+  />
+)}
     </div>
   );
 }
@@ -1787,6 +1804,9 @@ function AdminReportsSection({ selectedDate, teachers }) {
   const [teacherTotals, setTeacherTotals] = useState([]);
   const [teacherTotalsLoading, setTeacherTotalsLoading] = useState(false);
   const [teacherTotalsError, setTeacherTotalsError] = useState("");
+    // Özet kutuları: bugün ve toplam etüt sayısı
+  const [todayCount, setTodayCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Branşa göre ders kategorisi
   const categoryFromBranch = (branchRaw) => {
@@ -2059,6 +2079,13 @@ ${innerHtml}
         if (!mounted) return;
 
         const rows = data || [];
+                // Özet rakamlar
+        const allCount = rows.length;
+        const today = selectedDate;
+        const todayOnlyCount = rows.filter((r) => r.tarih === today).length;
+
+        setTotalCount(allCount);
+        setTodayCount(todayOnlyCount);
 
         // Öğrenci bazlı toplama
         const stuMap = new Map();
@@ -2227,6 +2254,32 @@ ${innerHtml}
         Tarih filtresi: <strong>{selectedDate}</strong> tarihine kadar olan
         tüm etütler raporlara dahildir.
       </p>
+            {/* Özet kutuları: Bugün ve toplam etüt sayısı */}
+      <div className="mb-3 grid gap-2 text-xs md:grid-cols-2">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/40">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+            Bugün yapılan etüt sayısı
+          </div>
+          <div className="text-lg font-semibold">
+            {todayCount}
+          </div>
+          <div className="text-[10px] text-gray-400">
+            Tarih: <strong>{selectedDate}</strong>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/40">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+            Toplam etüt sayısı
+          </div>
+          <div className="text-lg font-semibold">
+            {totalCount}
+          </div>
+          <div className="text-[10px] text-gray-400">
+            Başlangıçtan <strong>{selectedDate}</strong> tarihine kadar
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* ÖĞRENCİ RAPORLARI */}
