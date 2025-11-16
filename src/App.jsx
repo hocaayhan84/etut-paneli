@@ -381,7 +381,7 @@ useEffect(() => {
                   currentTeacher={currentTeacher}
                   currentRole={currentRole}
                   studentDb={studentDb}
-                  onUploadExcel={(file) => parseStudentExcel(file, setStudentDb)}
+                  onUploadExcel={(file) => parseStudentExcel(file, setStudentDb, supabase)}
                 />
               </>
             )}
@@ -1644,36 +1644,86 @@ function EtutTable({ teachers, currentTeacher, currentRole, studentDb, onUploadE
 }
 
 // ——— Excel (.xlsx) okuma ———
-function parseStudentExcel(file, setStudentDb) {
+function parseStudentExcel(file, setStudentDb, supabase) {
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     const data = new Uint8Array(e.target.result);
     const wb = XLSX.read(data, { type: "array" });
     const ws = wb.Sheets[wb.SheetNames[0]];
 
+    // A sütunu: Numara, B: Ad Soyad, C: Sınıf
     const rows = XLSX.utils.sheet_to_json(ws, {
       header: ["A", "B", "C"],
       defval: "",
     });
+
     const db = {};
+    const payload = [];
+
     for (let i = 0; i < rows.length; i++) {
-      const A = String(rows[i]["A"]).trim();
-      const B = String(rows[i]["B"]).trim();
-      const C = String(rows[i]["C"]).trim();
+      const A = String(rows[i]["A"]).trim(); // Öğrenci no
+      const B = String(rows[i]["B"]).trim(); // Ad soyad
+      const C = String(rows[i]["C"]).trim(); // Sınıf
+
+      // Başlık satırlarını atla
       if (
         !A ||
         A.toLowerCase() === "öğrenci no" ||
         A.toLowerCase() === "ogrenci no" ||
         A.toLowerCase() === "no"
-      )
+      ) {
         continue;
+      }
+
+      // Numara içermiyorsa (boş/yanlış satır) atla
       if (!/\d/.test(A)) continue;
+
+      // Ekrandaki anlık kullanım için
       db[A] = { name: B, class: C };
+
+      // Supabase'e yazmak için
+      payload.push({
+        ogr_no: A,
+        ad: B,
+        sinif: C,
+      });
     }
+
+    // React state: sayfada hemen kullanılabilsin
     setStudentDb(db);
-    alert(
-      `Öğrenci listesi yüklendi. Kayıt sayısı: ${Object.keys(db).length}`
-    );
+
+    // Supabase'e kaydet
+    if (supabase && payload.length > 0) {
+      try {
+        const { error } = await supabase
+          .from("etut_ogrenciler")
+          .upsert(payload, { onConflict: "ogr_no" });
+
+        if (error) {
+          console.error("Öğrenciler Supabase'e yazılırken hata:", error);
+          alert(
+            `Öğrenci listesi yüklendi ama Supabase'e kaydederken hata oluştu. (Satır sayısı: ${payload.length})`
+          );
+          return;
+        }
+
+        alert(
+          `Öğrenci listesi yüklendi ve Supabase'e kaydedildi. Kayıt sayısı: ${Object.keys(
+            db
+          ).length}`
+        );
+      } catch (e) {
+        console.error("Supabase upsert beklenmeyen hata:", e);
+        alert(
+          "Öğrenci listesi okundu fakat Supabase'e kaydedilirken beklenmeyen bir hata oluştu."
+        );
+      }
+    } else {
+      // Supabase kullanılamıyorsa en azından ekranda dursun
+      alert(
+        `Öğrenci listesi yüklendi. Kayıt sayısı: ${Object.keys(db).length}`
+      );
+    }
   };
   reader.readAsArrayBuffer(file);
 }
