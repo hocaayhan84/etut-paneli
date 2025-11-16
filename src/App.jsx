@@ -659,6 +659,107 @@ function EtutTable({
 
   const norm = (s) => (s || "").trim().toLocaleUpperCase("tr-TR");
 
+  // ——— ÖĞRETMEN ÖZET PANELİ (Günlük, Haftalık, Toplam) ———
+  const [summary, setSummary] = useState({
+    day: 0,
+    week: 0,
+    total: 0,
+  });
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+
+  const computeWeekRange = (dateStr) => {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) {
+      const today = new Date();
+      return {
+        start: localYMD(today),
+        end: localYMD(today),
+      };
+    }
+    const day = d.getDay(); // 0: Pazar, 1: Pazartesi, ...
+    const diffToMonday = (day + 6) % 7; // Pazartesiye göre
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return {
+      start: localYMD(monday),
+      end: localYMD(sunday),
+    };
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchSummary() {
+      if (!supabase || currentRole !== "teacher" || !currentTeacher) {
+        if (isMounted) {
+          setSummary({ day: 0, week: 0, total: 0 });
+          setSummaryError("");
+        }
+        return;
+      }
+
+      try {
+        setSummaryLoading(true);
+        setSummaryError("");
+
+        const { start, end } = computeWeekRange(selectedDate);
+
+        const [dayRes, weekRes, totalRes] = await Promise.all([
+          supabase
+            .from("etut_atamalari")
+            .select("*", { count: "exact", head: true })
+            .eq("ogretmen", currentTeacher)
+            .eq("tarih", selectedDate),
+          supabase
+            .from("etut_atamalari")
+            .select("*", { count: "exact", head: true })
+            .eq("ogretmen", currentTeacher)
+            .gte("tarih", start)
+            .lte("tarih", end),
+          supabase
+            .from("etut_atamalari")
+            .select("*", { count: "exact", head: true })
+            .eq("ogretmen", currentTeacher),
+        ]);
+
+        if (dayRes.error || weekRes.error || totalRes.error) {
+          console.error("Özet paneli için Supabase hata:", {
+            day: dayRes.error,
+            week: weekRes.error,
+            total: totalRes.error,
+          });
+          if (isMounted) {
+            setSummaryError("Özet bilgileri alınırken hata oluştu.");
+          }
+        }
+
+        if (!isMounted) return;
+
+        setSummary({
+          day: dayRes.count || 0,
+          week: weekRes.count || 0,
+          total: totalRes.count || 0,
+        });
+      } catch (e) {
+        console.error("Özet paneli beklenmeyen hata:", e);
+        if (isMounted) {
+          setSummaryError("Özet bilgileri alınırken beklenmeyen hata oluştu.");
+        }
+      } finally {
+        if (isMounted) setSummaryLoading(false);
+      }
+    }
+
+    fetchSummary();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDate, currentTeacher, currentRole]);
+
   const checkConflicts = (cellsForDay = {}) => {
     const msgs = [];
     const bad = new Set();
@@ -1270,6 +1371,50 @@ function EtutTable({
           )}
         </div>
       </div>
+
+      {/* ÖĞRETMEN ÖZET PANELİ */}
+      {currentRole === "teacher" && (
+        <div className="mx-3 mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-800 dark:bg-gray-900/40">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-semibold">
+              Etüt Özeti – {selectedDate}
+            </span>
+            {summaryLoading && (
+              <span className="text-[11px] text-gray-500">
+                Güncelleniyor…
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-white p-2 text-center shadow-sm dark:bg-gray-900/80">
+              <div className="text-[11px] text-gray-500">Bugün</div>
+              <div className="text-lg font-bold">{summary.day}</div>
+              <div className="text-[11px] text-gray-400">
+                Seçili tarihteki toplam etüt
+              </div>
+            </div>
+            <div className="rounded-xl bg-white p-2 text-center shadow-sm dark:bg-gray-900/80">
+              <div className="text-[11px] text-gray-500">Bu Hafta</div>
+              <div className="text-lg font-bold">{summary.week}</div>
+              <div className="text-[11px] text-gray-400">
+                Pazartesi–Pazar arası
+              </div>
+            </div>
+            <div className="rounded-xl bg-white p-2 text-center shadow-sm dark:bg-gray-900/80">
+              <div className="text-[11px] text-gray-500">Toplam</div>
+              <div className="text-lg font-bold">{summary.total}</div>
+              <div className="text-[11px] text-gray-400">
+                Tüm zamanlardaki etüt
+              </div>
+            </div>
+          </div>
+          {summaryError && (
+            <div className="mt-2 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
+              {summaryError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Uyarılar */}
       {warnings.length > 0 && (
