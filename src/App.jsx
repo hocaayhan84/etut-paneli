@@ -1351,7 +1351,6 @@ function EtutTable({
 
           {/* Yönetici aksiyonları */}
 
-/* 6.1 Sadece admin salon ekleyebilir */
 {currentRole === "admin" && (
   <button
     onClick={() =>
@@ -1363,7 +1362,6 @@ function EtutTable({
   </button>
 )}
 
-/* 6.2 Admin + Manager tabloyu dışa aktarabilir */
 {(currentRole === "admin" || currentRole === "manager") && (
   <>
     <button
@@ -1372,12 +1370,14 @@ function EtutTable({
     >
       CSV’e Aktar
     </button>
+
     <button
       onClick={exportXLSX}
       className="rounded-xl border border-gray-300 px-3 py-1 text-xs transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
     >
       .XLSX’e Aktar
     </button>
+
     <button
       onClick={exportPdf}
       className="rounded-xl bg-gray-900 px-3 py-1 text-xs font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
