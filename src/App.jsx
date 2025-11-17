@@ -2098,7 +2098,7 @@ function EtutTable({
   </div>
 )}
 
-      {/* Öğrenci Arama Modalı (sadece admin fiilen açabilir) */}
+            {/* Öğrenci Arama Modalı (sadece admin fiilen açabilir) */}
       {searchOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-800 dark:bg-gray-900">
@@ -2164,7 +2164,7 @@ function EtutTable({
         </div>
       )}
 
-            <div className="border-t border-gray-100 p-3 text-xs text-gray-500 dark:border-gray-800">
+      <div className="border-t border-gray-100 p-3 text-xs text-gray-500 dark:border-gray-800">
         Not: Atamalar <strong>tarih bazlı</strong> Supabase üzerinde
         saklanmaktadır. Öğretmen farklı bir bilgisayardan giriş yapsa bile
         aynı tarihteki atamaları görebilir.
@@ -2177,13 +2177,10 @@ function EtutTable({
           teachers={teachers}
         />
       )}
-            {/* Burada fragment'i kapatıyoruz */}
-            </>
-          )}
-        </section>
-      </main>
-    </div>
-  </div>
+    </section>
+  </main>
+</div>
+</div>
 );
 }
 
@@ -2207,7 +2204,7 @@ function AdminReportsSection({ selectedDate, teachers }) {
   const [teacherTotals, setTeacherTotals] = useState([]);
   const [teacherTotalsLoading, setTeacherTotalsLoading] = useState(false);
   const [teacherTotalsError, setTeacherTotalsError] = useState("");
-    // Özet kutuları: bugün ve toplam etüt sayısı
+  // Özet kutuları: bugün ve toplam etüt sayısı
   const [todayCount, setTodayCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
 
