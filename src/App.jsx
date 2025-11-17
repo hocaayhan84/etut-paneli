@@ -303,58 +303,6 @@ export default function App() {
       setOwnPwdLoading(false);
     }
   };
-    const handleChangeOwnPassword = async (e) => {
-    e.preventDefault();
-    setOwnPwdMessage("");
-
-    if (!currentTeacher) {
-      setOwnPwdMessage("Giriş yapmış bir öğretmen bulunamadı.");
-      return;
-    }
-
-    const teacherRow = teachers.find((t) => t.name === currentTeacher);
-    if (!teacherRow) {
-      setOwnPwdMessage("Kayıtlı öğretmen bulunamadı.");
-      return;
-    }
-
-    if ((teacherRow.password || "") !== ownOldPwd) {
-      setOwnPwdMessage("Mevcut şifre hatalı.");
-      return;
-    }
-
-    if (!ownNewPwd.trim()) {
-      setOwnPwdMessage("Yeni şifre boş olamaz.");
-      return;
-    }
-
-    try {
-      setOwnPwdLoading(true);
-
-      const { error } = await supabase
-        .from(TEACHERS_TABLE)
-        .update({ password: ownNewPwd.trim() })
-        .eq("id", teacherRow.id);
-
-      if (error) throw error;
-
-      // Lokal listeyi güncelle
-      setTeachers((prev) =>
-        prev.map((t) =>
-          t.id === teacherRow.id ? { ...t, password: ownNewPwd.trim() } : t
-        )
-      );
-
-      setOwnOldPwd("");
-      setOwnNewPwd("");
-      setOwnPwdMessage("Şifreniz başarıyla güncellendi.");
-    } catch (err) {
-      console.error("Şifre güncelleme hatası:", err);
-      setOwnPwdMessage("Şifre güncellenirken bir hata oluştu.");
-    } finally {
-      setOwnPwdLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     setCurrentTeacher("");
@@ -1707,12 +1655,13 @@ function EtutTable({
       </div>
 
                   {/* ÖĞRETMEN / MANAGER PANELİ: Atanan öğrenciler + Etüt özeti */}
-      {(isTeacher || isManager) && (
+      {(currentRole === "teacher" || currentRole === "manager") && (
         <div className="mx-3 mt-3 space-y-3 text-xs">
+          {/* Atanan öğrenciler kartı */}
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
             <div className="mb-2 flex items-center justify-between">
               <span className="font-semibold">
-  Bugün ve Bu Hafta Etüt Listesi
+  Bugün ve Bu Hafta Atanan Öğrenciler
 </span>
               {mySessionsLoading && (
                 <span className="text-[11px] text-gray-500">
@@ -1763,8 +1712,8 @@ function EtutTable({
       <span>⏰ {s.saat}. ders</span>
       <span>🏛️ Salon {s.salon || "-"}</span>
 
-      {/* MANAGER isen öğretmeni göster */}
-      {isManager && s.ogretmen && (
+      {/* Manager için öğretmen ismini de gösterelim */}
+      {s.ogretmen && (
         <span>👨‍🏫 {s.ogretmen}</span>
       )}
     </div>
