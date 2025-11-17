@@ -2164,21 +2164,29 @@ function EtutTable({
         </div>
       )}
 
-      <div className="border-t border-gray-100 p-3 text-xs text-gray-500 dark:border-gray-800">
+            <div className="border-t border-gray-100 p-3 text-xs text-gray-500 dark:border-gray-800">
         Not: Atamalar <strong>tarih bazlı</strong> Supabase üzerinde
         saklanmaktadır. Öğretmen farklı bir bilgisayardan giriş yapsa bile
         aynı tarihteki atamaları görebilir.
       </div>
+
       {/* Rehber öğretmen + Müdür için RAPORLAR BÖLÜMÜ */}
-{(currentRole === "admin" || currentRole === "manager") && (
-  <AdminReportsSection
-    selectedDate={selectedDate}
-    teachers={teachers}
-  />
-)}
+      {(currentRole === "admin" || currentRole === "manager") && (
+        <AdminReportsSection
+          selectedDate={selectedDate}
+          teachers={teachers}
+        />
+      )}
+            {/* Burada fragment'i kapatıyoruz */}
+            </>
+          )}
+        </section>
+      </main>
     </div>
-  );
+  </div>
+);
 }
+
 // ——— Rehber Öğretmen RAPORLAR BÖLÜMÜ ———
 function AdminReportsSection({ selectedDate, teachers }) {
   const [studentQuery, setStudentQuery] = useState("");
