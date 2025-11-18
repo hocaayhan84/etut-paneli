@@ -15,121 +15,91 @@ if (!supabaseUrl || !supabaseKey) {
   );
 }
 
-const supabase = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey)
-  : null;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ——— Sabitler ve Varsayılanlar ———
 const ADMIN_USER = { name: "AYHAN KAPICI (Rehber Öğretmen)", role: "admin" };
 const ADMIN_PASSWORD = "4321"; // Yönetici şifresi
-
-const MANAGER_USER = { name: "ETÜT SORUMLUSU", role: "manager" };
-const MANAGER_PASSWORD = "9999"; // Manager şifresi (isterseniz Supabase'e de taşıyabiliriz)
-
 const TEACHERS_TABLE = "etut_ogretmenler";
+const STUDENTS_TABLE = "etut_ogrenciler";
 
-// ——— Yardımcı fonksiyonlar ———
-function localYMDUtil(date) {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+// ——— Yardımcı Fonksiyonlar ———
+export function localYMDUtil(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function safeSheetNameForXLSX(raw) {
-  if (!raw) return "";
-  // Excel'in izin vermediği karakterleri temizle
-  const invalid = /[\\/?*[\]:]/g;
-  let name = raw.replace(invalid, " ").trim();
-  if (name.length > 31) name = name.slice(0, 31);
-  return name || "Sayfa";
+export function safeSheetNameForXLSX(name, fallback = "Sayfa") {
+  const cleaned =
+    (name ?? "").toString().replace(/[\\\/?*\[\]:]/g, " ").trim() || fallback;
+  return cleaned.slice(0, 31);
 }
 
-// ——— Ana Uygulama ———
-function App() {
-  // Aktif kullanıcı
-  const [currentUser, setCurrentUser] = useState(null); // { name, role }
-  const currentRole = currentUser?.role || null;
-  const currentTeacher = currentRole === "teacher" ? currentUser.name : "";
+export default function App() {
+  const [theme, setTheme] = useState("light");
+  const isDark = theme === "dark";
 
-  // Login form state
-  const [loginRole, setLoginRole] = useState("admin");
-  const [loginName, setLoginName] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState("");
-
-  // Öğretmen listesi
+  // ——— Öğretmenler (Supabase’ten ortak) ———
   const [teachers, setTeachers] = useState([]);
   const [teachersLoading, setTeachersLoading] = useState(false);
   const [teachersError, setTeachersError] = useState("");
 
-  // Öğrenci veritabanı (no -> { name, class })
-  const [studentDb, setStudentDb] = useState({});
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentsError, setStudentsError] = useState("");
-
-  // İlk açılışta öğretmenleri çek
   useEffect(() => {
     if (!supabase) return;
     let mounted = true;
 
-    async function loadTeachers() {
+    async function fetchTeachers() {
       try {
         setTeachersLoading(true);
         setTeachersError("");
-
         const { data, error } = await supabase
           .from(TEACHERS_TABLE)
           .select("*")
           .order("name", { ascending: true });
 
         if (error) {
-          console.error("Öğretmenler alınırken hata:", error);
-          if (mounted) {
-            setTeachersError("Öğretmen listesi alınırken hata oluştu.");
-          }
+          console.error("Öğretmenler yüklenirken hata:", error);
+          if (mounted) setTeachersError("Öğretmen listesi yüklenemedi.");
           return;
         }
-
-        if (!mounted) return;
-        setTeachers(data || []);
+        if (mounted) setTeachers(data || []);
       } catch (e) {
-        console.error("Öğretmenler beklenmeyen hata:", e);
-        if (mounted) {
-          setTeachersError("Öğretmen listesi alınırken beklenmeyen hata oluştu.");
-        }
+        console.error("Öğretmenler yüklenirken beklenmeyen hata:", e);
+        if (mounted) setTeachersError("Öğretmen listesi yüklenemedi.");
       } finally {
         if (mounted) setTeachersLoading(false);
       }
     }
 
-    loadTeachers();
+    fetchTeachers();
     return () => {
       mounted = false;
     };
   }, []);
 
-  // İlk açılışta Supabase'ten öğrenci listesi çek (varsa)
+  // ——— Kullanıcılar ve giriş ———
+  const [currentTeacher, setCurrentTeacher] = useState("");
+  const [currentRole, setCurrentRole] = useState("");
+
+  // Öğrenci veritabanı (No -> {name, class})
+  const [studentDb, setStudentDb] = useState({});
+
+  // Öğrenci veritabanını Supabase'ten yükle
   useEffect(() => {
     if (!supabase) return;
     let mounted = true;
 
-    async function loadStudents() {
+    async function fetchStudents() {
       try {
-        setStudentsLoading(true);
-        setStudentsError("");
-
         const { data, error } = await supabase
-          .from("etut_ogrenciler")
-          .select("ogr_no, ad, sinif");
+          .from(STUDENTS_TABLE)
+          .select("*");
 
         if (error) {
-          console.error("Öğrenciler alınırken hata:", error);
-          if (mounted) {
-            setStudentsError("Öğrenci listesi alınırken hata oluştu.");
-          }
+          console.error("Öğrenciler yüklenirken hata:", error);
           return;
         }
 
@@ -137,9 +107,8 @@ function App() {
 
         const db = {};
         (data || []).forEach((row) => {
-          const key = (row.ogr_no || "").toString().trim();
-          if (!key) return;
-          db[key] = {
+          if (!row.ogr_no) return;
+          db[String(row.ogr_no).trim()] = {
             name: row.ad || "",
             class: row.sinif || "",
           };
@@ -147,326 +116,556 @@ function App() {
 
         setStudentDb(db);
       } catch (e) {
-        console.error("Öğrenciler beklenmeyen hata:", e);
-        if (mounted) {
-          setStudentsError("Öğrenci listesi alınırken beklenmeyen hata oluştu.");
-        }
-      } finally {
-        if (mounted) setStudentsLoading(false);
+        console.error("Öğrenciler yüklenirken beklenmeyen hata:", e);
       }
     }
 
-    loadStudents();
+    fetchStudents();
     return () => {
       mounted = false;
     };
   }, []);
 
-  // Excel yükleme callback'i (EtutTable'a prop olarak gidecek)
-  const handleUploadExcel = (file) => {
-    if (!file) return;
-    parseStudentExcel(file, setStudentDb, supabase);
+  // ——— Yönetici için Öğretmen Yönetimi Form State ———
+  const [editingTeacherId, setEditingTeacherId] = useState(null);
+  const [tName, setTName] = useState("");
+  const [tBranch, setTBranch] = useState("");
+  const [tPassword, setTPassword] = useState("");
+
+  const resetTeacherForm = () => {
+    setEditingTeacherId(null);
+    setTName("");
+    setTBranch("");
+    setTPassword("");
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setLoginPassword("");
-    setLoginError("");
-  };
-
-  const handleLoginSubmit = async (e) => {
+  const handleSaveTeacher = async (e) => {
     e.preventDefault();
-    setLoginError("");
+    const name = tName.trim();
+    const branch = tBranch.trim();
+    const password = tPassword.trim();
 
-    if (!supabase && loginRole === "teacher") {
-      setLoginError("Sunucu bağlantısı yapılamadığı için öğretmen girişi kullanılamıyor.");
+    if (!name || !password) {
+      alert("Ad Soyad ve Şifre alanları zorunludur.");
       return;
     }
 
+    const exists = teachers.find(
+      (t) =>
+        t.name.toLocaleUpperCase("tr-TR") ===
+          name.toLocaleUpperCase("tr-TR") && t.id !== editingTeacherId
+    );
+    if (exists) {
+      const proceed = window.confirm(
+        `"${name}" isimli bir öğretmen zaten var. Yine de kaydetmek istiyor musunuz?`
+      );
+      if (!proceed) return;
+    }
+
     try {
-      setLoginLoading(true);
+      if (editingTeacherId) {
+        const { error } = await supabase
+          .from(TEACHERS_TABLE)
+          .update({ name, branch, password })
+          .eq("id", editingTeacherId);
 
-      // ADMIN
-      if (loginRole === "admin") {
-        if (loginPassword !== ADMIN_PASSWORD) {
-          setLoginError("Yönetici şifresi hatalı.");
-          return;
-        }
-        setCurrentUser(ADMIN_USER);
-        return;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from(TEACHERS_TABLE)
+          .insert({ name, branch, password });
+
+        if (error) throw error;
       }
 
-      // MANAGER
-      if (loginRole === "manager") {
-        if (loginPassword !== MANAGER_PASSWORD) {
-          setLoginError("Sorumlu şifresi hatalı.");
-          return;
-        }
-        setCurrentUser(MANAGER_USER);
-        return;
-      }
-
-      // TEACHER
-      const name = loginName.trim();
-      if (!name || !loginPassword) {
-        setLoginError("Lütfen öğretmen adı ve şifre girin.");
-        return;
-      }
-
-      const { data, error } = await supabase
+      const { data, error: refreshError } = await supabase
         .from(TEACHERS_TABLE)
         .select("*")
-        .eq("name", name)
-        .single();
+        .order("name", { ascending: true });
 
-      if (error || !data) {
-        console.error("Öğretmen girişi - kullanıcı bulunamadı:", error);
-        setLoginError("Öğretmen kaydı bulunamadı.");
-        return;
-      }
-
-      if ((data.password || "") !== loginPassword) {
-        setLoginError("Öğretmen şifresi hatalı.");
-        return;
-      }
-
-      setCurrentUser({ name: data.name, role: "teacher" });
+      if (refreshError) throw refreshError;
+      setTeachers(data || []);
+      resetTeacherForm();
     } catch (err) {
-      console.error("Login beklenmeyen hata:", err);
-      setLoginError("Giriş yapılırken beklenmeyen bir hata oluştu.");
-    } finally {
-      setLoginLoading(false);
+      console.error("Öğretmen kaydedilirken hata:", err);
+      alert("Öğretmen kaydedilirken hata oluştu. Lütfen tekrar deneyin.");
     }
   };
 
-  // ——— GÖRÜNÜM: Giriş ekranı ———
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-slate-100">
-        <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-4">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-slate-50 dark:bg-slate-50 dark:text-slate-900">
-              <ShipWheel size={22} />
+  const handleEditTeacher = (id) => {
+    const t = teachers.find((x) => x.id === id);
+    if (!t) return;
+    setEditingTeacherId(t.id);
+    setTName(t.name || "");
+    setTBranch(t.branch || "");
+    setTPassword(t.password || "");
+  };
+
+  const handleDeleteTeacher = async (id) => {
+    const t = teachers.find((x) => x.id === id);
+    const name = t?.name || "";
+    if (
+      !window.confirm(
+        `"${name || "Bu öğretmen"}" kaydını silmek istediğinize emin misiniz?`
+      )
+    )
+      return;
+
+    try {
+      const { error } = await supabase
+        .from(TEACHERS_TABLE)
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setTeachers((prev) => prev.filter((x) => x.id !== id));
+      if (editingTeacherId === id) {
+        resetTeacherForm();
+      }
+    } catch (err) {
+      console.error("Öğretmen silinirken hata:", err);
+      alert("Öğretmen silinirken hata oluştu. Lütfen tekrar deneyin.");
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentTeacher("");
+    setCurrentRole("");
+  };
+
+  // Admin glow
+  const [adminGlow, setAdminGlow] = useState(false);
+  useEffect(() => {
+    if (currentRole === "admin" && currentTeacher) {
+      setAdminGlow(true);
+      const t = setTimeout(() => setAdminGlow(false), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [currentRole, currentTeacher]);
+
+  return (
+    <div className={isDark ? "dark" : ""}>
+      <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+        {/* Üst bar */}
+        <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/70 backdrop-blur dark:border-gray-800 dark:bg-gray-900/70">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-gray-900">
+                <span className="text-lg font-bold">UF</span>
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold leading-tight">
+                  Ünye Fen Lisesi
+                </h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Öğretmen Paneli
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-semibold">
-                Ünye Fen Lisesi – Etüt Paneli
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Yönetici, sorumlu ve öğretmen girişi
-              </p>
-            </div>
-          </div>
-
-          <form
-            onSubmit={handleLoginSubmit}
-            className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80"
-          >
-            <div className="mb-3 grid gap-2 text-xs md:grid-cols-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                  Rol
-                </span>
-                <select
-                  value={loginRole}
-                  onChange={(e) => {
-                    setLoginRole(e.target.value);
-                    setLoginError("");
-                  }}
-                  className="h-9 rounded-lg border border-slate-300 px-2 text-xs outline-none transition focus:ring-2 focus:ring-slate-900/20 dark:border-slate-700 dark:bg-slate-900"
-                >
-                  <option value="admin">Yönetici (Rehber Öğretmen)</option>
-                  <option value="manager">Etüt Sorumlusu</option>
-                  <option value="teacher">Öğretmen</option>
-                </select>
-              </label>
-
-              {loginRole === "teacher" && (
-                <>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                      Öğretmen Adı
-                    </span>
-                    <input
-                      value={loginName}
-                      onChange={(e) => setLoginName(e.target.value)}
-                      placeholder="Ad Soyad"
-                      className="h-9 rounded-lg border border-slate-300 px-2 text-xs outline-none transition focus:ring-2 focus:ring-slate-900/20 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                      Şifre
-                    </span>
-                    <input
-                      type="password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      className="h-9 rounded-lg border border-slate-300 px-2 text-xs outline-none transition focus:ring-2 focus:ring-slate-900/20 dark:border-slate-700 dark:bg-slate-900"
-                    />
-                  </label>
-                </>
-              )}
-
-              {loginRole !== "teacher" && (
-                <div className="md:col-span-2 flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    Şifre
+            <div className="flex items-center gap-2">
+              {currentTeacher && (
+                <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-1 text-xs dark:border-gray-800">
+                  <span>
+                    Giriş:{" "}
+                    <span className="font-semibold">{currentTeacher}</span>
                   </span>
-                  <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="h-9 rounded-lg border border-slate-300 px-2 text-xs outline-none transition focus:ring-2 focus:ring-slate-900/20 dark:border-slate-700 dark:bg-slate-900"
-                  />
-                  <span className="text-[10px] text-slate-400">
-                    Yönetici ve sorumlu şifreleri sabittir. (İleride Supabase'e
-                    de taşıyabiliriz.)
-                  </span>
+                  {currentRole === "admin" && (
+                    <span
+                      className={`flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200 ${
+                        adminGlow
+                          ? "shadow-md ring-2 ring-blue-400/50 dark:ring-blue-500/70"
+                          : ""
+                      }`}
+                    >
+                      <ShipWheel
+                        size={12}
+                        className="text-blue-600 dark:text-blue-300"
+                      />{" "}
+                      Yönetici Paneli
+                    </span>
+                  )}
                 </div>
               )}
-            </div>
-
-            {loginError && (
-              <div className="mb-2 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
-                {loginError}
-              </div>
-            )}
-
-            <div className="mt-3 flex items-center justify-between">
               <button
-                type="submit"
-                disabled={loginLoading}
-                className="h-9 rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60 dark:bg-slate-50 dark:text-slate-900"
+                onClick={() => setTheme(isDark ? "light" : "dark")}
+                className="h-9 rounded-xl border border-gray-300 px-3 text-sm font-medium transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
               >
-                {loginLoading ? "Giriş yapılıyor…" : "Giriş Yap"}
+                {isDark ? "☀️ Aydınlık" : "🌙 Karanlık"}
               </button>
-              <div className="text-[10px] text-slate-400">
-                Supabase durumu:{" "}
-                {supabase ? "Bağlı" : "BAĞLI DEĞİL (env değişkenlerini kontrol edin)"}
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // ——— GÖRÜNÜM: Giriş yapıldı ———
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/80">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-slate-50 dark:bg-slate-50 dark:text-slate-900">
-              <ShipWheel size={20} />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">
-                Ünye Fen Lisesi – Etüt Paneli
-              </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                Tarih bazlı etüt planlama, özet ve raporlar
-              </div>
+              {currentTeacher && (
+                <button
+                  onClick={handleLogout}
+                  className="h-9 rounded-xl border border-gray-300 px-3 text-sm font-medium transition hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  Çıkış
+                </button>
+              )}
             </div>
           </div>
+        </header>
 
-          <div className="flex items-center gap-3 text-xs">
-            <div className="text-right">
-              <div className="font-semibold">{currentUser.name}</div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                {currentRole === "admin"
-                  ? "Yönetici (Rehber Öğretmen)"
-                  : currentRole === "manager"
-                  ? "Etüt Sorumlusu"
-                  : "Öğretmen"}
-              </div>
-            </div>
+        {/* Ana düzen */}
+        <main className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-4 md:grid-cols-[240px_1fr]">
+          {/* Sol: Öğretmen listesi – sadece bilgi amaçlı, sabit */}
+          <aside className="rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+            <h2 className="mb-2 text-sm font-semibold">Öğretmenler</h2>
+            {teachersLoading && (
+              <p className="text-xs text-gray-500">Yükleniyor…</p>
+            )}
+            {teachersError && (
+              <p className="text-xs text-rose-500">{teachersError}</p>
+            )}
+            <ul className="mt-1 space-y-1 text-sm">
+              {teachers.map((t) => (
+                <li key={t.id}>{t.name}</li>
+              ))}
+              <li className="mt-2 flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                <ShipWheel
+                  size={12}
+                  className={`inline-block text-blue-500 dark:text-blue-300 ${
+                    adminGlow ? "drop-shadow" : ""
+                  }`}
+                />
+                {ADMIN_USER.name}
+              </li>
+            </ul>
+          </aside>
+
+          {/* Sağ taraf: Giriş veya panel */}
+          <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+            {!currentTeacher ? (
+              <LoginCard
+                teachers={teachers}
+                adminUser={ADMIN_USER}
+                adminPassword={ADMIN_PASSWORD}
+                onSuccess={(name, role) => {
+                  setCurrentTeacher(name);
+                  setCurrentRole(role);
+                }}
+              />
+            ) : (
+              <>
+                {currentRole === "admin" && (
+                  <AdminTeacherPanel
+                    teachers={teachers}
+                    tName={tName}
+                    tBranch={tBranch}
+                    tPassword={tPassword}
+                    setTName={setTName}
+                    setTBranch={setTBranch}
+                    setTPassword={setTPassword}
+                    editingTeacherId={editingTeacherId}
+                    onSave={handleSaveTeacher}
+                    onReset={resetTeacherForm}
+                    onEdit={handleEditTeacher}
+                    onDelete={handleDeleteTeacher}
+                  />
+                )}
+
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <h2 className="text-xl font-semibold leading-tight md:text-2xl">
+                    Etüt Salonları
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 md:gap-3">
+                    <span>
+                      Rol:{" "}
+                      <strong>
+                        {currentRole === "admin"
+                          ? "Rehber / Yönetici"
+                          : currentRole === "manager"
+                          ? "Müdür / Müdür Yard."
+                          : "Öğretmen"}
+                      </strong>
+                    </span>
+                    <span className="hidden md:inline">
+                      Sütunlar: Etüt Adları • Satırlar: 1–8. saat
+                    </span>
+                  </div>
+                </div>
+
+                <EtutTable
+                  teachers={teachers}
+                  currentTeacher={currentTeacher}
+                  currentRole={currentRole}
+                  studentDb={studentDb}
+                  onUploadExcel={(file) =>
+                    parseStudentExcel(file, setStudentDb, supabase)
+                  }
+                />
+              </>
+            )}
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
+// ——— Yönetici Öğretmen Yönetimi Paneli ———
+function AdminTeacherPanel({
+  teachers,
+  tName,
+  tBranch,
+  tPassword,
+  setTName,
+  setTBranch,
+  setTPassword,
+  editingTeacherId,
+  onSave,
+  onReset,
+  onEdit,
+  onDelete,
+}) {
+  // Öğretmen tablosu aç/kapa (BAŞTA KAPALI)
+  const [listOpen, setListOpen] = useState(false);
+
+  return (
+    <div className="mb-4 space-y-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-800 dark:bg-gray-900/40">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">Öğretmen Yönetimi</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Yeni öğretmen ekleyebilir, mevcutların ad ve şifrelerini
+            güncelleyebilir veya silebilirsiniz.
+          </p>
+        </div>
+      </div>
+
+      {/* Öğretmen ekleme / düzenleme formu */}
+      <form
+        onSubmit={onSave}
+        className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+      >
+        <div className="space-y-2">
+          <div>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-300">
+              Ad Soyad
+            </label>
+            <input
+              value={tName}
+              onChange={(e) => setTName(e.target.value)}
+              className="h-9 w-full rounded-lg border border-gray-300 px-2 text-sm outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+              placeholder="Örn: HAYATİ GÜLDAL"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-300">
+              Branş (İsteğe bağlı)
+            </label>
+            <input
+              value={tBranch}
+              onChange={(e) => setTBranch(e.target.value)}
+              className="h-9 w-full rounded-lg border border-gray-300 px-2 text-sm outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+              placeholder="Örn: Matematik"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-300">
+              Şifre
+            </label>
+            <input
+              value={tPassword}
+              onChange={(e) => setTPassword(e.target.value)}
+              className="h-9 w-full rounded-lg border border-gray-300 px-2 text-sm outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+              placeholder="Örn: 1234"
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="submit"
+              className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+            >
+              {editingTeacherId ? "Güncelle" : "Kaydet"}
+            </button>
             <button
               type="button"
-              onClick={handleLogout}
-              className="h-8 rounded-lg border border-slate-300 px-3 text-[11px] transition hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              onClick={onReset}
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
             >
-              Çıkış
+              Temizle
             </button>
           </div>
         </div>
-      </header>
+      </form>
 
-      <main className="mx-auto flex max-w-7xl flex-col gap-3 p-3">
-        {/* Üst bilgilendirme / uyarılar */}
-        <div className="grid gap-3 text-xs md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/70">
-            <div className="mb-1 text-[11px] font-semibold text-slate-600 dark:text-slate-200">
-              Rol Bilgisi
-            </div>
-            {currentRole === "admin" && (
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Etüt atamalarını yapabilir, tüm salonları görebilir, Excel ile
-                öğrenci listesi yükleyebilir ve raporlara erişebilirsiniz.
-              </p>
-            )}
-            {currentRole === "manager" && (
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Tüm öğretmenlerin etüt özetlerini ve raporlarını görebilir,
-                CSV/XLSX/PDF çıktıları alabilirsiniz. Etüt hücrelerini{" "}
-                <strong>düzenleyemezsiniz</strong>.
-              </p>
-            )}
-            {currentRole === "teacher" && (
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Sadece size atanmış etütleri görebilir, şifrenizi değiştirebilir
-                ve kendi özetlerinizi görüntüleyebilirsiniz. Hücre düzenleme{" "}
-                <strong>yöneticiye özeldir</strong>.
-              </p>
-            )}
-          </div>
+      {/* Öğretmen Listesi başlık + aç/kapa butonu */}
+      <div className="mt-1 flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+          Öğretmen Listesi
+        </h4>
+        <button
+          type="button"
+          onClick={() => setListOpen((prev) => !prev)}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-[11px] text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          <span>{listOpen ? "Listeyi Gizle" : "Listeyi Göster"}</span>
+          <span className="text-[10px]">{listOpen ? "▲" : "▼"}</span>
+        </button>
+      </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/70">
-            <div className="mb-1 text-[11px] font-semibold text-slate-600 dark:text-slate-200">
-              Öğretmen Listesi Durumu
-            </div>
-            {teachersLoading ? (
-              <p className="text-[11px] text-slate-500">Öğretmenler yükleniyor…</p>
-            ) : teachersError ? (
-              <p className="text-[11px] text-rose-600">{teachersError}</p>
-            ) : (
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Kayıtlı öğretmen sayısı:{" "}
-                <strong>{teachers.length}</strong>
-              </p>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/70">
-            <div className="mb-1 text-[11px] font-semibold text-slate-600 dark:text-slate-200">
-              Öğrenci Listesi Durumu
-            </div>
-            {studentsLoading ? (
-              <p className="text-[11px] text-slate-500">
-                Supabase'ten öğrenci listesi yükleniyor…
-              </p>
-            ) : studentsError ? (
-              <p className="text-[11px] text-rose-600">{studentsError}</p>
-            ) : (
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Kayıtlı öğrenci sayısı:{" "}
-                <strong>{Object.keys(studentDb).length}</strong>. Yönetici,
-                Excel ile listeyi güncelleyebilir.
-              </p>
-            )}
-          </div>
+      {/* Liste sadece listOpen true iken görünsün */}
+      {listOpen && (
+        <div className="mt-2 overflow-auto rounded-xl border border-gray-200 bg-white text-xs dark:border-gray-800 dark:bg-gray-900">
+          <table className="min-w-full text-left">
+            <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500 dark:bg-gray-900/70">
+              <tr>
+                <th className="px-2 py-2">#</th>
+                <th className="px-2 py-2">Ad Soyad</th>
+                <th className="px-2 py-2">Branş</th>
+                <th className="px-2 py-2">Şifre</th>
+                <th className="px-2 py-2 text-right">İşlem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {teachers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-3 py-3 text-center text-xs text-gray-500"
+                  >
+                    Henüz öğretmen eklenmemiş.
+                  </td>
+                </tr>
+              ) : (
+                teachers.map((t, idx) => (
+                  <tr
+                    key={t.id}
+                    className="border-t border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+                  >
+                    <td className="px-2 py-2">{idx + 1}</td>
+                    <td className="px-2 py-2">{t.name}</td>
+                    <td className="px-2 py-2">
+                      {t.branch || (
+                        <span className="text-gray-400">–</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">{t.password}</td>
+                    <td className="px-2 py-2 text-right">
+                      <div className="inline-flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => onEdit(t.id)}
+                          className="rounded-lg border border-gray-300 px-2 py-1 text-[11px] hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
+                        >
+                          Düzenle
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(t.id)}
+                          className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-900/30 dark:text-rose-200"
+                        >
+                          Sil
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+      )}
 
-        {/* ANA ETÜT TABLOSU ve ALTLARI */}
-        <EtutTable
-          teachers={teachers}
-          currentTeacher={currentTeacher}
-          currentRole={currentRole}
-          studentDb={studentDb}
-          onUploadExcel={handleUploadExcel}
-        />
-      </main>
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Not: Gerçek sistemlerde şifreler bu şekilde açık gösterilmez; okul içi
+        kullanım ve pratiklik amacıyla burada görünür tutulmuştur.
+      </p>
+    </div>
+  );
+}
+
+// ——— Giriş Kartı ———
+function LoginCard({ teachers, adminUser, adminPassword, onSuccess }) {
+  const [selected, setSelected] = useState("");
+  const [pwd, setPwd] = useState("");
+  const [err, setErr] = useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    setErr("");
+
+    if (!selected) {
+      setErr("Lütfen kullanıcı seçin.");
+      return;
+    }
+
+    // Yönetici
+    if (selected === adminUser.name) {
+      if (pwd === adminPassword) {
+        onSuccess(adminUser.name, "admin");
+      } else {
+        setErr("Yönetici şifresi hatalı.");
+      }
+      return;
+    }
+
+    // Öğretmen
+    const teacher = teachers.find((t) => t.name === selected);
+    if (!teacher) {
+      setErr("Bu isimde bir öğretmen bulunamadı.");
+      return;
+    }
+    if (pwd !== (teacher.password || "")) {
+      setErr("Şifre hatalı.");
+      return;
+    }
+
+    // Müdür / Müdür yardımcısı için özel rol (branşta MÜDÜR geçiyorsa)
+    const rawBranch = (teacher.branch || "").toLocaleUpperCase("tr-TR");
+    const isManager = rawBranch.includes("MÜDÜR");
+
+    onSuccess(teacher.name, isManager ? "manager" : "teacher");
+  };
+
+  const options = [
+    ...teachers.map((t) => ({ label: t.name, value: t.name })),
+    { label: adminUser.name, value: adminUser.name },
+  ];
+
+  return (
+    <div className="mx-auto w-full max-w-md rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
+      <h3 className="mb-2 text-sm font-semibold">Giriş Yap</h3>
+      <form onSubmit={submit} className="space-y-2 text-sm">
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">Kullanıcı</label>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            className="h-9 w-full rounded-xl border border-gray-300 px-2 outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+          >
+            <option value="">Seçin…</option>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-gray-500">Şifre</label>
+          <input
+            type="password"
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            className="h-9 w-full rounded-xl border border-gray-300 px-2 outline-none transition focus:ring-2 focus:ring-gray-900/20 dark:border-gray-700 dark:bg-gray-900"
+          />
+        </div>
+        {err && (
+          <div className="rounded-lg border border-rose-300 bg-rose-50 p-2 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-200">
+            {err}
+          </div>
+        )}
+        <div className="pt-1">
+          <button
+            type="submit"
+            className="w-full rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-gray-900"
+          >
+            Giriş
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -729,6 +928,8 @@ function EtutTable({
         query = query.gte("tarih", start).lte("tarih", end);
       } else if (kind === "total") {
         // Tüm zamanlar – ekstra tarih filtresi yok
+        // İsterseniz sadece bugüne kadar olsun derseniz:
+        // query = query.lte("tarih", selectedDate);
       }
 
       const { data, error } = await query
@@ -1523,7 +1724,7 @@ function EtutTable({
 
           {/* Atanan öğrenciler kartı */}
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-            <div className="mb-2 flex items-center justify_between">
+            <div className="mb-2 flex items-center justify-between">
               <span className="font-semibold">
                 Bugün ve Bu Hafta Atanan Öğrenciler
               </span>
@@ -2087,7 +2288,7 @@ function EtutTable({
         aynı tarihteki atamaları görebilir.
       </div>
 
-      {/* Admin / Manager için: ÖZET + RAPORLAR */}
+      {/* Admin / Manager için: ÖZET + RAPORLAR (bileşenler aşağıda tanımlanacak) */}
       {(currentRole === "admin" || currentRole === "manager") && (
         <AdminGlobalSummarySection selectedDate={selectedDate} />
       )}
@@ -2793,7 +2994,6 @@ ${innerHtml}
       mounted = false;
     };
   }, [selectedDate, teachers]);
-
   // 1. Öğrenci arama
   const handleStudentSearch = async () => {
     const q = studentQuery.trim();
@@ -2921,7 +3121,7 @@ ${innerHtml}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {/* ÖĞРENCI RAPORLARI */}
+        {/* ÖĞRENCİ RAPORLARI */}
         <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-3 shadow-sm backdrop-blur-sm dark:border-blue-900/40 dark:bg-blue-900/20">
           <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-500">
             <span>Öğrenci Raporları</span>
@@ -3265,7 +3465,6 @@ ${innerHtml}
     </div>
   );
 }
-
 // ——— Excel (.xlsx) okuma ———
 function parseStudentExcel(file, setStudentDb, supabase) {
   const reader = new FileReader();
@@ -3350,4 +3549,3 @@ function parseStudentExcel(file, setStudentDb, supabase) {
   };
   reader.readAsArrayBuffer(file);
 }
-export default App;
