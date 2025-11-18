@@ -3350,3 +3350,4 @@ function parseStudentExcel(file, setStudentDb, supabase) {
   };
   reader.readAsArrayBuffer(file);
 }
+export default App;
