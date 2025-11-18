@@ -904,40 +904,6 @@ function EtutTable({
     };
   }, [selectedDate, currentTeacher, currentRole]);
 
-        if (dayRes.error || weekRes.error || totalRes.error) {
-          console.error("Özet paneli için Supabase hata:", {
-            day: dayRes.error,
-            week: weekRes.error,
-            total: totalRes.error,
-          });
-          if (isMounted) {
-            setSummaryError("Özet bilgileri alınırken hata oluştu.");
-          }
-        }
-
-        if (!isMounted) return;
-
-        setSummary({
-          day: dayRes.count || 0,
-          week: weekRes.count || 0,
-          total: totalRes.count || 0,
-        });
-      } catch (e) {
-        console.error("Özet paneli beklenmeyen hata:", e);
-        if (isMounted) {
-          setSummaryError("Özet bilgileri alınırken beklenmeyen hata oluştu.");
-        }
-      } finally {
-        if (isMounted) setSummaryLoading(false);
-      }
-    }
-
-    fetchSummary();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedDate, currentTeacher, currentRole]);
 
   // Öğretmen: özet sayısına tıklayınca listeyi getir/aç
   const toggleTeacherSummaryList = async (kind) => {
