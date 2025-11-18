@@ -827,16 +827,11 @@ function EtutTable({
   };
 
   // Öğretmen özet sayıları (gün/hafta/toplam)
-    useEffect(() => {
+  useEffect(() => {
     let isMounted = true;
 
     async function fetchSummary() {
-      // Sadece öğretmen ve manager için özet göster
-      if (
-        !supabase ||
-        !currentTeacher ||
-        (currentRole !== "teacher" && currentRole !== "manager")
-      ) {
+      if (!supabase || currentRole !== "teacher" || !currentTeacher) {
         if (isMounted) {
           setSummary({ day: 0, week: 0, total: 0 });
           setSummaryError("");
@@ -850,23 +845,22 @@ function EtutTable({
 
         const { start, end } = computeWeekRange(selectedDate);
 
-        const buildBase = () => {
-          let q = supabase
-            .from("etut_atamalari")
-            .select("*", { count: "exact", head: true });
-
-          // Öğretmen ise sadece kendi etütleri, manager ise tüm etütler
-          if (currentRole === "teacher") {
-            q = q.eq("ogretmen", currentTeacher);
-          }
-
-          return q;
-        };
-
         const [dayRes, weekRes, totalRes] = await Promise.all([
-          buildBase().eq("tarih", selectedDate),
-          buildBase().gte("tarih", start).lte("tarih", end),
-          buildBase(),
+          supabase
+            .from("etut_atamalari")
+            .select("*", { count: "exact", head: true })
+            .eq("ogretmen", currentTeacher)
+            .eq("tarih", selectedDate),
+          supabase
+            .from("etut_atamalari")
+            .select("*", { count: "exact", head: true })
+            .eq("ogretmen", currentTeacher)
+            .gte("tarih", start)
+            .lte("tarih", end),
+          supabase
+            .from("etut_atamalari")
+            .select("*", { count: "exact", head: true })
+            .eq("ogretmen", currentTeacher),
         ]);
 
         if (dayRes.error || weekRes.error || totalRes.error) {
@@ -903,7 +897,6 @@ function EtutTable({
       isMounted = false;
     };
   }, [selectedDate, currentTeacher, currentRole]);
-
 
   // Öğretmen: özet sayısına tıklayınca listeyi getir/aç
   const toggleTeacherSummaryList = async (kind) => {
@@ -963,16 +956,12 @@ function EtutTable({
     }
   };
 
-    // Öğretmenin / manager'ın paneli: bugün + bu haftadaki etütler
+  // Öğretmenin kendi öğrencileri: bugün + bu haftadaki ileri tarihli etütler
   useEffect(() => {
     let isMounted = true;
 
     async function fetchMySessions() {
-      if (
-        !supabase ||
-        !currentTeacher ||
-        (currentRole !== "teacher" && currentRole !== "manager")
-      ) {
+      if (!supabase || currentRole !== "teacher" || !currentTeacher) {
         if (isMounted) {
           setMyTodaySessions([]);
           setMyFutureSessions([]);
@@ -987,68 +976,14 @@ function EtutTable({
 
         const { start, end } = computeWeekRange(selectedDate);
 
-        let query = supabase
+        const { data, error } = await supabase
           .from("etut_atamalari")
           .select("*")
+          .eq("ogretmen", currentTeacher)
           .gte("tarih", start)
           .lte("tarih", end)
           .order("tarih", { ascending: true })
           .order("saat", { ascending: true });
-
-        // Öğretmen sadece kendi etütlerini görür, manager tüm etütleri görür
-        if (currentRole === "teacher") {
-          query = query.eq("ogretmen", currentTeacher);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          console.error(
-            "Öğretmen/manager öğrenci listesi için Supabase hata:",
-            error
-          );
-          if (isMounted) {
-            setMySessionsError(
-              "Atanan öğrenciler listesi alınırken hata oluştu."
-            );
-            setMyTodaySessions([]);
-            setMyFutureSessions([]);
-          }
-          return;
-        }
-
-        if (!isMounted) return;
-
-        const today = [];
-        const future = [];
-
-        (data || []).forEach((r) => {
-          if (r.tarih === selectedDate) today.push(r);
-          else if (r.tarih > selectedDate) future.push(r);
-        });
-
-        setMyTodaySessions(today);
-        setMyFutureSessions(future);
-      } catch (e) {
-        console.error("Öğretmen/manager öğrenci listesi beklenmeyen hata:", e);
-        if (isMounted) {
-          setMySessionsError(
-            "Atanan öğrenciler listesi alınırken beklenmeyen bir hata oluştu."
-          );
-          setMyTodaySessions([]);
-          setMyFutureSessions([]);
-        }
-      } finally {
-        if (isMounted) setMySessionsLoading(false);
-      }
-    }
-
-    fetchMySessions();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedDate, currentTeacher, currentRole]);
 
         if (error) {
           console.error(
@@ -1718,7 +1653,7 @@ function EtutTable({
       </div>
 
       {/* ÖĞRETMEN PANELİ: Şifre değiştir + Atanan öğrenciler + Etüt özeti */}
-      {(currentRole === "teacher" || currentRole === "manager") && (
+      {currentRole === "teacher" && (
         <div className="mx-3 mt-3 space-y-3 text-xs">
           {/* Şifremi değiştir (küçük açılır panel) */}
           <div className="rounded-2xl border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900/60">
@@ -1787,16 +1722,11 @@ function EtutTable({
             )}
           </div>
 
-                {/* ÖĞRETMEN / MANAGER PANELİ: Atanan öğrenciler + Etüt özeti */}
-      {(currentRole === "teacher" || currentRole === "manager") && (
-        <div className="mx-3 mt-3 space-y-3 text-xs">
           {/* Atanan öğrenciler kartı */}
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
             <div className="mb-2 flex items-center justify-between">
               <span className="font-semibold">
-                {currentRole === "teacher"
-                  ? "Bugün ve Bu Hafta Size Atanan Öğrenciler"
-                  : "Bugün ve Bu Hafta Planlanan Tüm Etütler"}
+                Bugün ve Bu Hafta Atanan Öğrenciler
               </span>
               {mySessionsLoading && (
                 <span className="text-[11px] text-gray-500">
@@ -1816,14 +1746,14 @@ function EtutTable({
               myTodaySessions.length === 0 &&
               myFutureSessions.length === 0 && (
                 <div className="text-[11px] text-gray-500">
-                  Seçili hafta için etüt kaydı bulunmuyor.
+                  Seçili hafta için size atanmış etüt bulunmuyor.
                 </div>
               )}
 
             {(myTodaySessions.length > 0 || myFutureSessions.length > 0) && (
               <div className="grid gap-3 md:grid-cols-2">
                 {/* Bugünkü etütler */}
-                <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-2 shadow-sm dark:border-blue-900/40 dark:bg-blue-900/20">
+                <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-2 shadow-sm dark:border-blue-900 dark:bg-blue-900/20">
                   <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-blue-700 dark:text-blue-200">
                     <span className="text-base">📅</span>
                     <span>Bugünkü Etütler ({selectedDate})</span>
@@ -1834,7 +1764,7 @@ function EtutTable({
                         key={`today-${s.ogr_no || idx}-${s.saat}-${s.salon}`}
                         className="rounded-lg border border-blue-300 bg-blue-100 px-2 py-1 text-[11px] shadow-sm dark:border-blue-800 dark:bg-blue-900/40"
                       >
-                        <div className="font-semibold flex items-center gap-1">
+                        <div className="flex items-center gap-1 font-semibold">
                           <span>👤</span>
                           <span>{s.ogr_ad || "İsimsiz Öğrenci"}</span>
                           <span className="text-[10px] text-blue-700 dark:text-blue-300">
@@ -1842,13 +1772,10 @@ function EtutTable({
                           </span>
                         </div>
 
-                        <div className="text-[10px] text-blue-700 dark:text-blue-300 flex flex-wrap gap-2 mt-1">
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-blue-700 dark:text-blue-300">
                           <span>🏫 {s.sinif || "-"}</span>
                           <span>⏰ {s.saat}. ders</span>
                           <span>🏛️ Salon {s.salon || "-"}</span>
-                          {s.ogretmen && (
-                            <span>👨‍🏫 {s.ogretmen}</span>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -1856,7 +1783,7 @@ function EtutTable({
                 </div>
 
                 {/* İleri tarihli etütler */}
-                <div className="rounded-2xl border border-purple-200 bg-purple-50/60 p-2 shadow-sm dark:border-purple-900/40 dark:bg-purple-900/20">
+                <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-2 shadow-sm dark:border-purple-900/60 dark:bg-purple-900/20">
                   <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-purple-700 dark:text-purple-200">
                     <span className="text-base">⏭️</span>
                     <span>İleri Tarihli Etütler (Bu Hafta)</span>
@@ -1867,7 +1794,7 @@ function EtutTable({
                         key={`future-${s.ogr_no || idx}-${s.tarih}-${s.saat}-${s.salon}`}
                         className="rounded-lg border border-purple-300 bg-purple-100 px-2 py-1 text-[11px] shadow-sm dark:border-purple-800 dark:bg-purple-900/40"
                       >
-                        <div className="font-semibold flex items-center gap-1">
+                        <div className="flex items-center gap-1 font-semibold">
                           <span>👤</span>
                           <span>{s.ogr_ad || "İsimsiz Öğrenci"}</span>
                           <span className="text-[10px] text-purple-700 dark:text-purple-300">
@@ -1875,14 +1802,11 @@ function EtutTable({
                           </span>
                         </div>
 
-                        <div className="text-[10px] text-purple-700 dark:text-purple-300 flex flex-wrap gap-2 mt-1">
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-purple-700 dark:text-purple-300">
                           <span>📅 {s.tarih}</span>
                           <span>🏫 {s.sinif || "-"}</span>
                           <span>⏰ {s.saat}. ders</span>
                           <span>🏛️ Salon {s.salon || "-"}</span>
-                          {s.ogretmen && (
-                            <span>👨‍🏫 {s.ogretmen}</span>
-                          )}
                         </div>
                       </div>
                     ))}
@@ -1891,50 +1815,6 @@ function EtutTable({
               </div>
             )}
           </div>
-
-          {/* Etüt özeti kartı */}
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-semibold">
-                Etüt Özeti – {selectedDate}
-              </span>
-              {summaryLoading && (
-                <span className="text-[11px] text-gray-500">
-                  Güncelleniyor…
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl bg-white p-2 text-center shadow-sm dark:bg-gray-900/80">
-                <div className="text-[11px] text-gray-500">Bugün</div>
-                <div className="text-lg font-bold">{summary.day}</div>
-                <div className="text-[11px] text-gray-400">
-                  Seçili tarihteki toplam etüt
-                </div>
-              </div>
-              <div className="rounded-xl bg-white p-2 text-center shadow-sm dark:bg-gray-900/80">
-                <div className="text-[11px] text-gray-500">Bu Hafta</div>
-                <div className="text-lg font-bold">{summary.week}</div>
-                <div className="text-[11px] text-gray-400">
-                  Pazartesi–Pazar arası
-                </div>
-              </div>
-              <div className="rounded-xl bg-white p-2 text-center shadow-sm dark:bg-gray-900/80">
-                <div className="text-[11px] text-gray-500">Toplam</div>
-                <div className="text-lg font-bold">{summary.total}</div>
-                <div className="text-[11px] text-gray-400">
-                  Tüm zamanlardaki etüt
-                </div>
-              </div>
-            </div>
-            {summaryError && (
-              <div className="mt-2 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-200">
-                {summaryError}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
           {/* Etüt özeti kartı (gün/hafta/toplam + tıklanabilir listeler) */}
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
